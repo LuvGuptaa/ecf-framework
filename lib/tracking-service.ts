@@ -1,32 +1,5 @@
 // Advanced tracking service for precise coordinate and timing measurement
-export interface DetailedTapCoordinate {
-  // Screen coordinates
-  screenX: number
-  screenY: number
-  // Client coordinates (relative to viewport)
-  clientX: number
-  clientY: number
-  // Page coordinates (including scroll)
-  pageX: number
-  pageY: number
-  // Element-relative coordinates
-  offsetX: number
-  offsetY: number
-  // Timing information
-  timestamp: number
-  performanceTimestamp: number
-  // Touch/mouse information
-  pressure?: number
-  pointerType: "mouse" | "touch" | "pen"
-  // Grid information
-  cellIndex: number
-  gridPosition: { row: number; col: number }
-  // Correctness
-  isCorrect: boolean
-  // Device information
-  devicePixelRatio: number
-  viewportSize: { width: number; height: number }
-}
+import type { DetailedTapCoordinate } from "./types"
 
 export interface TimingMeasurement {
   trialStartTime: number
@@ -49,6 +22,7 @@ export class TrackingService {
     gridRows: number,
     gridCols: number,
     isCorrect: boolean,
+    reactionTime: number,
   ): DetailedTapCoordinate {
     const timestamp = Date.now()
     const performanceTimestamp = performance.now()
@@ -86,6 +60,10 @@ export class TrackingService {
     const offsetX = clientX - rect.left
     const offsetY = clientY - rect.top
 
+    // Calculate bottom-left coordinates
+    const bottomLeftX = offsetX
+    const bottomLeftY = rect.height - offsetY
+
     // Calculate grid position
     const row = Math.floor(cellIndex / gridCols)
     const col = cellIndex % gridCols
@@ -99,8 +77,11 @@ export class TrackingService {
       pageY,
       offsetX,
       offsetY,
+      coordinatesBottomLeft: { x: bottomLeftX, y: bottomLeftY },
+      elementDimensions: { width: rect.width, height: rect.height },
       timestamp,
       performanceTimestamp,
+      reactionTime,
       pressure,
       pointerType,
       cellIndex,

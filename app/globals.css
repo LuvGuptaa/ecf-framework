@@ -121,18 +121,33 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* Disable text selection and touch behaviors for better mobile experience */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Ensure buttons are optimized for touch and clickable */
+  button {
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+
+  /* Allow text selection for input elements */
+  input, textarea, select {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+  }
+
+  /* Disable text selection and touch behaviors for test page */
+  .test-page {
     -webkit-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
-  }
-
-  /* Ensure buttons are optimized for touch */
-  button {
     touch-action: manipulation;
   }
 }

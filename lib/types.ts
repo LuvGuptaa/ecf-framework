@@ -63,9 +63,14 @@ export interface DetailedTapCoordinate {
   // Element-relative coordinates
   offsetX: number
   offsetY: number
+  // Cartesian coordinates (Bottom-Left origin)
+  coordinatesBottomLeft: { x: number; y: number }
+  // Element dimensions (Canvas size)
+  elementDimensions: { width: number; height: number }
   // Timing information
   timestamp: number
   performanceTimestamp: number
+  reactionTime: number
   // Touch/mouse information
   pressure?: number
   pointerType: "mouse" | "touch" | "pen"

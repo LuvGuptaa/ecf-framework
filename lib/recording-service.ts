@@ -123,6 +123,22 @@ export class RecordingService {
     }
   }
 
+  // Start recording from an existing stream (e.g. Canvas captureStream)
+  async startStreamRecording(stream: MediaStream, options: RecordingOptions = { video: true, audio: false }): Promise<void> {
+    try {
+      await this.initializeRecording(stream, options)
+    } catch (error) {
+      console.error("Error starting stream recording:", error)
+      this.notifyStateChange({
+        isRecording: false,
+        isPaused: false,
+        duration: 0,
+        error: "Failed to start stream recording",
+      })
+      throw error
+    }
+  }
+
   private async initializeRecording(stream: MediaStream, options: RecordingOptions): Promise<void> {
     this.stream = stream
     this.recordedChunks = []

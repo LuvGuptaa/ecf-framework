@@ -315,23 +315,59 @@ export default function ResultsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Trial Details</CardTitle>
-            <CardDescription>Individual trial performance</CardDescription>
+            <CardDescription>Individual trial performance and tap timing</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {session.trials.map((trial, index) => (
-                <div key={trial.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <Badge variant="outline">Trial {trial.trialNumber}</Badge>
-                    <span className="font-medium">{trial.reactionTime.toFixed(0)}ms</span>
-                    {trial.frameRate && <span className="text-xs text-muted-foreground">{trial.frameRate}fps</span>}
+                <div key={trial.id} className="border rounded-lg overflow-hidden">
+                  {/* Trial Header */}
+                  <div className="flex items-center justify-between p-3 bg-muted/30">
+                    <div className="flex items-center gap-3">
+                      <Badge variant="outline">Trial {trial.trialNumber}</Badge>
+                      <span className="font-medium text-green-600">{trial.reactionTime.toFixed(0)}ms</span>
+                      {trial.frameRate && <span className="text-xs text-muted-foreground">{trial.frameRate}fps</span>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {trial.wrongTaps.length > 0 && <Badge variant="destructive">{trial.wrongTaps.length} wrong</Badge>}
+                      <Badge variant={trial.wrongTaps.length === 0 ? "default" : "secondary"}>
+                        {trial.wrongTaps.length === 0 ? "Perfect" : "Completed"}
+                      </Badge>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {trial.wrongTaps.length > 0 && <Badge variant="destructive">{trial.wrongTaps.length} wrong</Badge>}
-                    <Badge variant={trial.isCorrect ? "default" : "destructive"}>
-                      {trial.isCorrect ? "Correct" : "Incorrect"}
-                    </Badge>
-                  </div>
+
+                  {/* Tap Details */}
+                  {trial.wrongTaps.length > 0 && (
+                    <div className="p-3 space-y-2 bg-background">
+                      <p className="text-xs font-medium text-muted-foreground mb-2">Tap Sequence:</p>
+                      {trial.wrongTaps.map((tap, tapIndex) => (
+                        <div key={tapIndex} className="flex items-center justify-between text-sm py-1.5 px-2 rounded bg-destructive/5 border border-destructive/20">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs border-destructive/40 text-destructive">
+                              Wrong #{tapIndex + 1}
+                            </Badge>
+                            <span className="text-muted-foreground text-xs">
+                              Cell {tap.cellIndex} (Row {tap.gridPosition.row + 1}, Col {tap.gridPosition.col + 1})
+                            </span>
+                          </div>
+                          <span className="font-medium text-destructive">{tap.reactionTime.toFixed(0)}ms</span>
+                        </div>
+                      ))}
+                      {trial.correctTap && (
+                        <div className="flex items-center justify-between text-sm py-1.5 px-2 rounded bg-green-50 border border-green-200">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs border-green-600/40 text-green-600">
+                              Correct
+                            </Badge>
+                            <span className="text-muted-foreground text-xs">
+                              Cell {trial.correctTap.cellIndex} (Row {trial.correctTap.gridPosition.row + 1}, Col {trial.correctTap.gridPosition.col + 1})
+                            </span>
+                          </div>
+                          <span className="font-medium text-green-600">{trial.reactionTime.toFixed(0)}ms</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
