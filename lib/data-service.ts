@@ -6,6 +6,13 @@ import {
   getTestSession,
   getAllSessions,
   saveWrongTap,
+  saveERPSession,
+  saveERPTrial,
+  updateERPSession,
+  getERPSession,
+  getAllERPSessions,
+  deleteTestSession,
+  deleteERPSession,
 } from "./firebase-service"
 import type {
   DetailedTapCoordinate,
@@ -13,6 +20,8 @@ import type {
   TestSession,
   Trial,
   Recording,
+  ERPSession,
+  ERPTrialData,
 } from "./types"
 import { localDB } from "./local-db"
 
@@ -114,6 +123,64 @@ export const dataService = {
       throw logError(`Could not get local recordings for session ${sessionId}`, error)
     }
   },
-}
 
-export type DataService = typeof dataService
+  async createERPSession(input: Omit<ERPSession, "id" | "createdAt">): Promise<{ id: string }> {
+    try {
+      const id = await saveERPSession(input)
+      return { id }
+    } catch (error) {
+      throw logError("Could not create ERP session", error)
+    }
+  },
+
+  async recordERPTrial(input: ERPTrialData): Promise<{ id: string }> {
+    try {
+      const id = await saveERPTrial(input)
+      return { id }
+    } catch (error) {
+      throw logError("Could not record ERP trial", error)
+    }
+  },
+
+  async completeERPSession(sessionId: string, updates: Partial<ERPSession> = {}) {
+    try {
+      await updateERPSession(sessionId, updates)
+    } catch (error) {
+      throw logError(`Could not complete ERP session ${sessionId}`, error)
+    }
+  },
+
+  async fetchERPSession(sessionId: string): Promise<ERPSession | null> {
+    try {
+      const session = await getERPSession(sessionId)
+      return session
+    } catch (error) {
+      throw logError(`Could not fetch ERP session ${sessionId}`, error)
+    }
+  },
+
+  async fetchERPSessions(): Promise<ERPSession[]> {
+    try {
+      const sessions = await getAllERPSessions()
+      return sessions
+    } catch (error) {
+      throw logError("Could not fetch ERP sessions", error)
+    }
+  },
+
+  async deleteSession(sessionId: string): Promise<void> {
+    try {
+      await deleteTestSession(sessionId)
+    } catch (error) {
+      throw logError(`Could not delete test session ${sessionId}`, error)
+    }
+  },
+
+  async deleteERPSession(sessionId: string): Promise<void> {
+    try {
+      await deleteERPSession(sessionId)
+    } catch (error) {
+      throw logError(`Could not delete ERP session ${sessionId}`, error)
+    }
+  },
+}

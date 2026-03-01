@@ -31,6 +31,7 @@ export interface TestStoreState {
   wrongTaps: DetailedTapCoordinate[]
   showResults: boolean
   lastTrialResult: LastTrialResult | null
+  calibrationDuration: number
 }
 
 export interface TestStoreActions {
@@ -44,6 +45,7 @@ export interface TestStoreActions {
   markResultsHidden: () => void
   advanceTrial: () => void
   setCurrentTrial: (index: number) => void
+  setCalibrationDuration: (duration: number) => void
 }
 
 const defaultConfig: TestConfig = {
@@ -66,6 +68,7 @@ const initialState: TestStoreState = {
   wrongTaps: [],
   showResults: false,
   lastTrialResult: null,
+  calibrationDuration: 5000,
 }
 
 export type TestStoreSlice = TestStoreState & TestStoreActions
@@ -188,6 +191,10 @@ export const useTestStore = create<TestStoreSlice>((set, get) => ({
       stimulusDisplayTime: null,
       oddShapeIndex: null,
     })
+  },
+
+  setCalibrationDuration: (duration: number) => {
+    set({ calibrationDuration: duration })
   },
 }))
 

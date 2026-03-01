@@ -98,3 +98,86 @@ export interface Recording {
   blob: Blob;
   createdAt: Date;
 }
+
+export type PatchType = "target" | "distractor" | "normal" | "bottomUpTarget"
+
+export interface PatchItem {
+  type: PatchType
+  row: number
+  col: number
+  letter?: string
+  color?: string
+}
+
+export interface TopDownConfig {
+  targetProbability: number
+  distractorProbability: number
+  gridSize: number
+  numberOfTrials: number
+  maxTrialTime: number
+  slideDuration: number
+  fillPercentage: number
+  patchSizeCm: number
+  bottomUpProbability: number
+  bottomUpTargetProbability: number
+  fixationDuration: number
+  interTrialInterval: number
+  stimulusDuration: number
+}
+
+export interface OddballConfig {
+  targetProbability: number
+  distractorProbability: number
+  stimuliPerTrial: number
+  numberOfTrials: number
+  maxTrialTime: number
+  fixationDuration: number
+  stimulusDuration: number
+  interTrialInterval: number
+}
+
+/** @deprecated Bottom-up is now integrated into TopDownConfig via bottomUpProbability */
+export interface BottomUpConfig {
+  targetProbability: number
+  distractorProbability: number
+  gridSize: number
+  numberOfTrials: number
+  maxTrialTime: number
+  slideDuration: number
+  fixationDuration: number
+  interTrialInterval: number
+}
+
+export type ERPTaskType = "top-down" | "visual-oddball" | "bottom-up"
+
+export interface ERPKeypress {
+  key: string
+  timestamp: number
+  performanceTimestamp: number
+}
+
+export interface ERPTrialData {
+  sessionId: string
+  trialNumber: number
+  taskType: ERPTaskType
+  patches: PatchItem[]
+  keypresses: ERPKeypress[]
+  trialStartTime: number
+  trialEndTime: number
+  reactionTime: number
+  timedOut: boolean
+  stimulusSequence?: PatchType[]
+  deviceInfo?: any
+  performanceMetrics?: any
+}
+
+export interface ERPSession {
+  id: string
+  participantId: string
+  participantName: string
+  taskType: ERPTaskType
+  taskConfig: TopDownConfig | OddballConfig | BottomUpConfig
+  createdAt: Date
+  completedAt?: Date
+  trials?: ERPTrialData[]
+}

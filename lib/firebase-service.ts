@@ -11,11 +11,12 @@ import {
   limit,
   startAfter,
   setDoc,
+  deleteDoc,
   type DocumentSnapshot,
 } from "firebase/firestore"
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
 import { db, storage } from "./firebase"
-import type { Participant, TestSession, Trial, DetailedTapCoordinate } from "./types"
+import type { Participant, TestSession, Trial, DetailedTapCoordinate, ERPSession, ERPTrialData } from "./types"
 
 const sanitizeForFirestore = <T>(value: T): T => {
   if (value === undefined) {
@@ -435,6 +436,196 @@ export const saveWrongTap = async (
     await setDoc(docRef, payload)
     return docRef.id
   } catch (error) {
+    throw error
+  }
+}
+
+export const saveERPSession = async (
+  session: Omit<ERPSession, "id" | "createdAt" | "trials">,
+  id?: string,
+): Promise<string> => {
+  try {
+    const collectionRef = collection(db, "erp_sessions")
+    const docRef = id ? doc(collectionRef, id) : doc(collectionRef)
+    const payload = sanitizeForFirestore({
+      ...session,
+      createdAt: Timestamp.now(),
+    })
+    await setDoc(docRef, payload)
+    return docRef.id
+  } catch (error) {
+    throw error
+  }
+}
+
+export const saveERPTrial = async (
+  trial: Omit<ERPTrialData, "id">,
+  id?: string,
+): Promise<string> => {
+  try {
+    const collectionRef = collection(db, "erp_trials")
+    const docRef = id ? doc(collectionRef, id) : doc(collectionRef)
+    const payload = sanitizeForFirestore({
+      ...trial,
+      createdAt: Timestamp.now(),
+    })
+    await setDoc(docRef, payload)
+    return docRef.id
+  } catch (error) {
+    throw error
+  }
+}
+
+export const updateERPSession = async (
+  sessionId: string,
+  updates: Partial<ERPSession>,
+): Promise<void> => {
+  try {
+    const sessionRef = doc(db, "erp_sessions", sessionId)
+    const updateData: Record<string, unknown> = { ...updates }
+    if (Object.prototype.hasOwnProperty.call(updates, "completedAt")) {
+      const completedAt = updates.completedAt
+      updateData.completedAt = completedAt ? Timestamp.fromDate(completedAt) : null
+    }
+    const sanitized = sanitizeForFirestore(updateData) as Record<string, unknown>
+    if (Object.keys(sanitized).length === 0) return
+    await updateDoc(sessionRef, sanitized)
+  } catch (error) {
+    throw error
+  }
+}
+
+export const getERPSession = async (sessionId: string): Promise<ERPSession | null> => {
+  try {
+    const sessionRef = doc(db, "erp_sessions", sessionId)
+    const sessionSnap = await getDoc(sessionRef)
+
+    if (!sessionSnap.exists()) {
+      return null
+    }
+
+    const sessionData = sessionSnap.data()
+
+    let trials: ERPTrialData[] = []
+    try {
+      const trialsQuery = query(
+        collection(db, "erp_trials"),
+        where("sessionId", "==", sessionId),
+        orderBy("trialNumber", "asc"),
+      )
+      const trialsSnapshot = await getDocs(trialsQuery)
+      trials = trialsSnapshot.docs.map((trialDoc) => ({
+        id: trialDoc.id,
+        ...trialDoc.data(),
+        createdAt: trialDoc.data().createdAt?.toDate(),
+      })) as ERPTrialData[]
+    } catch (indexError) {
+      const trialsQuery = query(
+        collection(db, "erp_trials"),
+        where("sessionId", "==", sessionId),
+      )
+      const trialsSnapshot = await getDocs(trialsQuery)
+      trials = trialsSnapshot.docs.map((trialDoc) => ({
+        id: trialDoc.id,
+        ...trialDoc.data(),
+        createdAt: trialDoc.data().createdAt?.toDate(),
+      })) as ERPTrialData[]
+      trials.sort((a, b) => a.trialNumber - b.trialNumber)
+    }
+
+    return {
+      id: sessionSnap.id,
+      ...sessionData,
+      createdAt: sessionData.createdAt.toDate(),
+      completedAt: sessionData.completedAt?.toDate(),
+      trials,
+    } as ERPSession
+  } catch (error) {
+    console.error("Error getting ERP session:", error)
+    return null
+  }
+}
+
+export const getAllERPSessions = async (): Promise<ERPSession[]> => {
+  try {
+    const q = query(collection(db, "erp_sessions"), orderBy("createdAt", "desc"))
+    const querySnapshot = await getDocs(q)
+    const sessions: ERPSession[] = []
+
+    for (const docSnap of querySnapshot.docs) {
+      const data = docSnap.data()
+
+      let trials: ERPTrialData[] = []
+      try {
+        const trialsQuery = query(
+          collection(db, "erp_trials"),
+          where("sessionId", "==", docSnap.id),
+          orderBy("trialNumber", "asc"),
+        )
+        const trialsSnapshot = await getDocs(trialsQuery)
+        trials = trialsSnapshot.docs.map((trialDoc) => ({
+          id: trialDoc.id,
+          ...trialDoc.data(),
+          createdAt: trialDoc.data().createdAt?.toDate(),
+        })) as ERPTrialData[]
+      } catch (indexError) {
+        const trialsQuery = query(
+          collection(db, "erp_trials"),
+          where("sessionId", "==", docSnap.id),
+        )
+        const trialsSnapshot = await getDocs(trialsQuery)
+        trials = trialsSnapshot.docs.map((trialDoc) => ({
+          id: trialDoc.id,
+          ...trialDoc.data(),
+          createdAt: trialDoc.data().createdAt?.toDate(),
+        })) as ERPTrialData[]
+        trials.sort((a, b) => a.trialNumber - b.trialNumber)
+      }
+
+      sessions.push({
+        id: docSnap.id,
+        ...data,
+        createdAt: data.createdAt.toDate(),
+        completedAt: data.completedAt?.toDate(),
+        trials,
+      } as ERPSession)
+    }
+
+    return sessions
+  } catch (error) {
+    console.error("Error getting all ERP sessions:", error)
+    return []
+  }
+}
+
+export const deleteTestSession = async (sessionId: string): Promise<void> => {
+  try {
+    const trialsQuery = query(collection(db, "trials"), where("sessionId", "==", sessionId))
+    const trialsSnap = await getDocs(trialsQuery)
+
+    for (const trialDoc of trialsSnap.docs) {
+      const wrongTapsQuery = query(collection(db, "wrong_taps"), where("trialId", "==", trialDoc.id))
+      const wrongTapsSnap = await getDocs(wrongTapsQuery)
+      await Promise.all(wrongTapsSnap.docs.map(d => deleteDoc(d.ref)))
+      await deleteDoc(trialDoc.ref)
+    }
+
+    await deleteDoc(doc(db, "sessions", sessionId))
+  } catch (error) {
+    console.error("Error deleting test session:", error)
+    throw error
+  }
+}
+
+export const deleteERPSession = async (sessionId: string): Promise<void> => {
+  try {
+    const trialsQuery = query(collection(db, "erp_trials"), where("sessionId", "==", sessionId))
+    const trialsSnap = await getDocs(trialsQuery)
+    await Promise.all(trialsSnap.docs.map(d => deleteDoc(d.ref)))
+
+    await deleteDoc(doc(db, "erp_sessions", sessionId))
+  } catch (error) {
+    console.error("Error deleting ERP session:", error)
     throw error
   }
 }

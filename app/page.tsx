@@ -28,6 +28,7 @@ export default function HomePage() {
 
   const [selectedTaskId, setSelectedTaskId] = useState<string>("reaction-time")
   const [isLoading, setIsLoading] = useState(false)
+  const [calibrationSeconds, setCalibrationSeconds] = useState(5)
 
   const handleParticipantChange = (field: string, value: string) => {
     setParticipantData((prev) => ({
@@ -74,6 +75,7 @@ export default function HomePage() {
         id: participantId,
         ...cleanedParticipant,
       })
+      store.setCalibrationDuration(calibrationSeconds * 1000)
 
       router.push(`/${selectedTaskId}?participantId=${participantId}`)
     } catch (error) {
@@ -196,6 +198,19 @@ export default function HomePage() {
                   {tasks[selectedTaskId].description}
                 </div>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="calibration">Calibration Duration (seconds)</Label>
+              <p className="text-xs text-muted-foreground">Screen flashes black &amp; white before and after each task for syncing recordings.</p>
+              <Input
+                id="calibration"
+                type="number"
+                min="1"
+                max="30"
+                value={calibrationSeconds}
+                onChange={(e) => setCalibrationSeconds(Number(e.target.value) || 5)}
+              />
             </div>
 
             <Button

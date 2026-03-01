@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Home,
@@ -22,8 +23,16 @@ import {
   ArrowLeft,
   ArrowRight,
   RefreshCw,
+  Trash2,
+  Loader2,
 } from "lucide-react"
-import type { TestSession } from "@/lib/types"
+import type { TestSession, ERPSession } from "@/lib/types"
+
+type HistorySession = TestSession | ERPSession
+
+const isERPSession = (session: HistorySession): session is ERPSession => {
+  return "taskType" in session
+}
 import { dataService } from "@/lib/data-service"
 import { useToast } from "@/hooks/use-toast"
 
@@ -45,8 +54,8 @@ export default function HistoryPage() {
   const router = useRouter()
   const { toast } = useToast()
 
-  const [sessions, setSessions] = useState<TestSession[]>([])
-  const [filteredSessions, setFilteredSessions] = useState<TestSession[]>([])
+  const [sessions, setSessions] = useState<HistorySession[]>([])
+  const [filteredSessions, setFilteredSessions] = useState<HistorySession[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [filters, setFilters] = useState<FilterOptions>({
     searchTerm: "",
@@ -55,11 +64,25 @@ export default function HistoryPage() {
     sortBy: "newest",
   })
 
+  // Multi-select state
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set())
+
+  // Modal State
+  const [deleteSessionTarget, setDeleteSessionTarget] = useState<HistorySession | null>(null)
+  const [isDeletingMultiple, setIsDeletingMultiple] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+
   // Load all sessions (in a real app, you'd implement pagination)
   const loadSessions = async () => {
     setIsLoading(true)
     try {
-      const allSessions = await dataService.fetchSessions()
+      const [classicSessions, erpSessions] = await Promise.all([
+        dataService.fetchSessions(),
+        dataService.fetchERPSessions(),
+      ])
+      const allSessions: HistorySession[] = [...classicSessions, ...erpSessions].sort(
+        (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+      )
       setSessions(allSessions)
       setFilteredSessions(allSessions)
     } catch (error) {
@@ -92,9 +115,14 @@ export default function HistoryPage() {
       )
     }
 
-    // Shape filter
+    // Shape / Task Type filter
     if (filters.shapeFilter !== "all") {
-      filtered = filtered.filter((session) => session.shape === filters.shapeFilter)
+      filtered = filtered.filter((session) => {
+        if (isERPSession(session)) {
+          return session.taskType === filters.shapeFilter
+        }
+        return session.shape === filters.shapeFilter
+      })
     }
 
     // Date range filter
@@ -129,8 +157,8 @@ export default function HistoryPage() {
         case "name":
           return a.participantName.localeCompare(b.participantName)
         case "performance":
-          const avgA = a.trials.length > 0 ? a.trials.reduce((sum, t) => sum + t.reactionTime, 0) / a.trials.length : 0
-          const avgB = b.trials.length > 0 ? b.trials.reduce((sum, t) => sum + t.reactionTime, 0) / b.trials.length : 0
+          const avgA = (a.trials && a.trials.length > 0) ? a.trials.reduce((sum: number, t: any) => sum + t.reactionTime, 0) / a.trials.length : 0
+          const avgB = (b.trials && b.trials.length > 0) ? b.trials.reduce((sum: number, t: any) => sum + t.reactionTime, 0) / b.trials.length : 0
           return avgA - avgB
         default:
           return 0
@@ -144,8 +172,89 @@ export default function HistoryPage() {
     setFilters((prev) => ({ ...prev, [key]: value }))
   }
 
-  const calculateSessionStats = (session: TestSession) => {
-    if (session.trials.length === 0) {
+  // Multi-select helpers
+  const toggleSelection = (sessionId: string) => {
+    setSelectedSessionIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(sessionId)) {
+        next.delete(sessionId)
+      } else {
+        next.add(sessionId)
+      }
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedSessionIds.size === filteredSessions.length) {
+      setSelectedSessionIds(new Set())
+    } else {
+      setSelectedSessionIds(new Set(filteredSessions.map((s) => s.id)))
+    }
+  }
+
+  const confirmDeleteSelected = () => {
+    if (selectedSessionIds.size === 0) return
+    setIsDeletingMultiple(true)
+  }
+
+  const executeDeleteSelected = async () => {
+    if (selectedSessionIds.size === 0) return
+
+    setIsDeleting(true)
+    try {
+      const deletionPromises = filteredSessions
+        .filter((s) => selectedSessionIds.has(s.id))
+        .map(async (session) => {
+          if (isERPSession(session)) {
+            return dataService.deleteERPSession(session.id)
+          } else {
+            return dataService.deleteSession(session.id)
+          }
+        })
+
+      await Promise.all(deletionPromises)
+      toast({ title: "Sessions Deleted", description: `Successfully removed ${selectedSessionIds.size} session(s).` })
+      setSelectedSessionIds(new Set())
+      await loadSessions()
+    } catch (error) {
+      console.error("Error deleting sessions:", error)
+      toast({ title: "Delete Failed", description: "Could not delete some sessions.", variant: "destructive" })
+    } finally {
+      setIsDeleting(false)
+      setIsDeletingMultiple(false)
+    }
+  }
+
+  const confirmDeleteSession = (session: HistorySession) => {
+    setDeleteSessionTarget(session)
+  }
+
+  const executeDeleteSession = async () => {
+    if (!deleteSessionTarget) return
+    const session = deleteSessionTarget
+
+    setIsDeleting(true)
+    try {
+      if (isERPSession(session)) {
+        await dataService.deleteERPSession(session.id)
+      } else {
+        await dataService.deleteSession(session.id)
+      }
+      toast({ title: "Session Deleted", description: "The session has been permanently removed." })
+      await loadSessions()
+    } catch (error) {
+      console.error("Error deleting session:", error)
+      toast({ title: "Delete Failed", description: "Could not delete the session.", variant: "destructive" })
+    } finally {
+      setIsDeleting(false)
+      setDeleteSessionTarget(null)
+    }
+  }
+
+  const calculateSessionStats = (session: HistorySession) => {
+    const trials = session.trials || []
+    if (trials.length === 0) {
       return {
         averageReactionTime: 0,
         totalWrongTaps: 0,
@@ -154,35 +263,47 @@ export default function HistoryPage() {
       }
     }
 
-    const reactionTimes = session.trials.map((t) => t.reactionTime)
-    const totalWrongTaps = session.trials.reduce((sum, t) => sum + t.wrongTaps.length, 0)
-    const correctTrials = session.trials.filter((t) => t.isCorrect).length
+    const reactionTimes = trials.map((t: any) => t.reactionTime)
+    let totalWrongTaps = 0
+    let correctTrials = 0
+
+    if (isERPSession(session)) {
+      // For ERP, we assume a trial is "correct" if it didn't time out, or based on specific logic.
+      // We'll just define it simply here:
+      correctTrials = trials.filter((t: any) => !t.timedOut).length
+      totalWrongTaps = trials.length - correctTrials
+    } else {
+      totalWrongTaps = trials.reduce((sum: number, t: any) => sum + (t.wrongTaps?.length || 0), 0)
+      correctTrials = trials.filter((t: any) => t.isCorrect).length
+    }
 
     return {
-      averageReactionTime: reactionTimes.reduce((sum, rt) => sum + rt, 0) / reactionTimes.length,
+      averageReactionTime: reactionTimes.reduce((sum: number, rt: number) => sum + rt, 0) / reactionTimes.length,
       totalWrongTaps,
-      accuracy: (correctTrials / session.trials.length) * 100,
-      completionRate: session.completedAt ? 100 : (session.trials.length / 10) * 100, // Assuming 10 trials
+      accuracy: (correctTrials / trials.length) * 100,
+      completionRate: session.completedAt ? 100 : (trials.length / 10) * 100, // Assuming 10 trials
     }
   }
 
-  const exportSessionData = (session: TestSession) => {
+  const exportSessionData = (session: HistorySession) => {
     const stats = calculateSessionStats(session)
     const exportData = {
       session: {
         id: session.id,
         participant: session.participantName,
-        shape: session.shape,
-        gridSize: `${session.gridRows}x${session.gridCols}`,
+        taskType: isERPSession(session) ? session.taskType : session.shape,
+        gridSize: isERPSession(session)
+          ? ("gridSize" in session.taskConfig ? `${session.taskConfig.gridSize}x${session.taskConfig.gridSize}` : "N/A")
+          : `${session.gridRows}x${session.gridCols}`,
         createdAt: session.createdAt.toISOString(),
         completedAt: session.completedAt?.toISOString(),
       },
       statistics: stats,
-      trials: session.trials.map((trial) => ({
+      trials: (session.trials || []).map((trial: any) => ({
         trialNumber: trial.trialNumber,
         reactionTime: trial.reactionTime,
-        isCorrect: trial.isCorrect,
-        wrongTapCount: trial.wrongTaps.length,
+        isCorrect: trial.isCorrect !== undefined ? trial.isCorrect : !trial.timedOut,
+        wrongTapCount: trial.wrongTaps ? trial.wrongTaps.length : (trial.timedOut ? 1 : 0),
         oddShapeIndex: trial.oddShapeIndex,
         coordinates: {
           correctTap: trial.correctTap,
@@ -190,6 +311,9 @@ export default function HistoryPage() {
         },
         deviceInfo: trial.deviceInfo,
         performanceMetrics: trial.performanceMetrics,
+        // ERP specific additions:
+        keypresses: trial.keypresses,
+        patches: trial.patches,
       })),
     }
 
@@ -304,11 +428,14 @@ export default function HistoryPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Shapes</SelectItem>
-                    <SelectItem value="up">Up Arrow</SelectItem>
-                    <SelectItem value="down">Down Arrow</SelectItem>
-                    <SelectItem value="left">Left Arrow</SelectItem>
-                    <SelectItem value="right">Right Arrow</SelectItem>
+                    <SelectItem value="all">All Task Types</SelectItem>
+                    <SelectItem value="up">Reactive: Up Arrow</SelectItem>
+                    <SelectItem value="down">Reactive: Down Arrow</SelectItem>
+                    <SelectItem value="left">Reactive: Left Arrow</SelectItem>
+                    <SelectItem value="right">Reactive: Right Arrow</SelectItem>
+                    <SelectItem value="top-down">ERP: Top-Down Search</SelectItem>
+                    <SelectItem value="visual-oddball">ERP: Visual Oddball</SelectItem>
+                    <SelectItem value="bottom-up">ERP: Bottom-Up Search</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -344,11 +471,32 @@ export default function HistoryPage() {
               </div>
             </div>
 
-            <div className="flex gap-2 mt-4">
+            <div className="flex gap-2 mt-4 items-center">
               <Button onClick={exportAllData} variant="outline" disabled={filteredSessions.length === 0}>
                 <Download className="h-4 w-4 mr-2" />
                 Export All ({filteredSessions.length})
               </Button>
+              <div className="flex-1" />
+              <Button
+                variant="outline"
+                onClick={toggleSelectAll}
+                className="shrink-0"
+                disabled={filteredSessions.length === 0}
+              >
+                {selectedSessionIds.size === filteredSessions.length && filteredSessions.length > 0
+                  ? "Deselect All"
+                  : "Select All"}
+              </Button>
+              {selectedSessionIds.size > 0 && (
+                <Button
+                  variant="destructive"
+                  onClick={confirmDeleteSelected}
+                  className="shrink-0"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Selected ({selectedSessionIds.size})
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -379,21 +527,48 @@ export default function HistoryPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredSessions.map((session) => {
               const stats = calculateSessionStats(session)
-              const ShapeIcon = shapeIcons[session.shape]
+              const trialsLen = session.trials?.length || 0
+              let ShapeIcon = Target // Default task icon
+              let taskLabel = ""
+              let gridLabel = ""
+
+              if (isERPSession(session)) {
+                taskLabel = `ERP: ${session.taskType}`
+                gridLabel = "gridSize" in session.taskConfig ? `${session.taskConfig.gridSize}x${session.taskConfig.gridSize}` : "N/A"
+              } else {
+                taskLabel = `Reactive: ${session.shape}`
+                gridLabel = `${session.gridRows}x${session.gridCols}`
+                ShapeIcon = shapeIcons[session.shape] || Target
+              }
 
               return (
-                <Card key={session.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <User className="h-4 w-4" />
-                        {session.participantName}
-                      </CardTitle>
-                      <div className="flex items-center gap-1">
-                        <ShapeIcon className="h-4 w-4 text-muted-foreground" />
-                        <Badge variant={session.completedAt ? "default" : "secondary"}>
+                <Card
+                  key={session.id}
+                  className={`hover:shadow-md transition-shadow relative overflow-hidden ${selectedSessionIds.has(session.id) ? "border-primary ring-1 ring-primary" : ""
+                    }`}
+                >
+                  <CardHeader className="pb-3 relative z-10">
+                    <div className="absolute right-0 top-0 p-4">
+                      <Checkbox
+                        checked={selectedSessionIds.has(session.id)}
+                        onCheckedChange={() => toggleSelection(session.id)}
+                        aria-label={`Select session for ${session.participantName}`}
+                        className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2 pr-8">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                          <span className="truncate">{session.participantName}</span>
+                        </CardTitle>
+                        <Badge variant={session.completedAt ? "default" : "secondary"} className="shrink-0">
                           {session.completedAt ? "Complete" : "Incomplete"}
                         </Badge>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <ShapeIcon className="h-3 w-3" />
+                        <span className="capitalize">{taskLabel}</span>
                       </div>
                     </div>
                     <CardDescription className="flex items-center gap-2">
@@ -407,18 +582,16 @@ export default function HistoryPage() {
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div>
                         <span className="text-muted-foreground">Grid:</span>
-                        <span className="ml-1 font-medium">
-                          {session.gridRows}×{session.gridCols}
-                        </span>
+                        <span className="ml-1 font-medium">{gridLabel}</span>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Trials:</span>
-                        <span className="ml-1 font-medium">{session.trials.length}</span>
+                        <span className="ml-1 font-medium">{trialsLen}</span>
                       </div>
                     </div>
 
                     {/* Performance Stats */}
-                    {session.trials.length > 0 && (
+                    {trialsLen > 0 && (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground flex items-center gap-1">
@@ -459,6 +632,9 @@ export default function HistoryPage() {
                       <Button variant="outline" size="sm" onClick={() => exportSessionData(session)}>
                         <Download className="h-3 w-3" />
                       </Button>
+                      <Button variant="destructive" size="sm" onClick={() => confirmDeleteSession(session)} className="shrink-0" title="Delete Session">
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -467,6 +643,47 @@ export default function HistoryPage() {
           </div>
         )}
       </div>
+
+      {/* Custom Confirmation Modal */}
+      {(deleteSessionTarget || isDeletingMultiple) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="bg-card text-card-foreground border rounded-lg shadow-lg w-full max-w-md p-6 m-4 animate-in fade-in zoom-in-95 duration-200">
+            <h2 className="text-xl font-bold mb-4">Confirm Deletion</h2>
+            <p className="text-muted-foreground mb-6">
+              {deleteSessionTarget
+                ? `Are you sure you want to delete the session for ${deleteSessionTarget.participantName}?`
+                : `Are you sure you want to delete ${selectedSessionIds.size} selected session(s)?`}{" "}
+              This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                disabled={isDeleting}
+                onClick={() => {
+                  setDeleteSessionTarget(null)
+                  setIsDeletingMultiple(false)
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={isDeleting}
+                onClick={deleteSessionTarget ? executeDeleteSession : executeDeleteSelected}
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  "Delete"
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

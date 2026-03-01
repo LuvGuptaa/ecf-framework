@@ -11,7 +11,7 @@ import { useTestStore } from "@/lib/stores/test-store"
 import { RecordingService } from "@/lib/recording-service"
 import { localDB } from "@/lib/local-db"
 import { CanvasRenderer } from "@/components/canvas-renderer"
-import { Camera, Monitor } from "lucide-react"
+import { Monitor } from "lucide-react"
 
 interface ReactionRunProps {
     config: TestConfig
@@ -26,12 +26,10 @@ export function ReactionRun({ config, participant, onComplete }: ReactionRunProp
 
     // Refs
     const recordingServiceRef = useRef<RecordingService | null>(null)
-    const cameraRecordingServiceRef = useRef<RecordingService | null>(null)
     const pendingTrialsRef = useRef<Array<Omit<Trial, "id" | "createdAt">>>([])
 
     // State
     const [isRecording, setIsRecording] = useState(false)
-    const [isCameraRecording, setIsCameraRecording] = useState(false)
     const [isReadyToStart, setIsReadyToStart] = useState(false)
 
     // Store
@@ -133,28 +131,6 @@ export function ReactionRun({ config, participant, onComplete }: ReactionRunProp
                 variant: "destructive"
             })
         }
-
-        // Start Camera Recording
-        try {
-            console.log("[Test] Starting camera recording...")
-            const cameraStream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
-                audio: false
-            })
-            const camRecorder = new RecordingService((state) => {
-                setIsCameraRecording(state.isRecording)
-            })
-            cameraRecordingServiceRef.current = camRecorder
-            await camRecorder.startStreamRecording(cameraStream)
-            console.log("[Test] Camera recording started.")
-        } catch (e) {
-            console.warn("Camera access denied or failed", e)
-            toast({
-                title: "Camera Unavailable",
-                description: "Camera recording could not be started. Check permissions.",
-                variant: "default"
-            })
-        }
     }, [toast])
 
     const finishSession = useCallback(async () => {
@@ -172,22 +148,6 @@ export function ReactionRun({ config, participant, onComplete }: ReactionRunProp
                                 id: `${sessionId}-screen`,
                                 sessionId,
                                 type: "screen",
-                                blob,
-                                createdAt: new Date()
-                            })
-                        }
-                    })
-                )
-            }
-
-            if (cameraRecordingServiceRef.current) {
-                promises.push(
-                    cameraRecordingServiceRef.current.stopRecording().then(blob => {
-                        if (blob) {
-                            return localDB.saveRecording({
-                                id: `${sessionId}-camera`,
-                                sessionId,
-                                type: "camera",
                                 blob,
                                 createdAt: new Date()
                             })
@@ -316,13 +276,6 @@ export function ReactionRun({ config, participant, onComplete }: ReactionRunProp
                         <div className="h-2 w-2 bg-red-500 rounded-full animate-pulse"></div>
                         <Monitor className="h-3 w-3 text-slate-600" />
                         <span className="text-xs font-medium text-slate-600">REC</span>
-                    </div>
-                )}
-                {isCameraRecording && (
-                    <div className="flex items-center gap-2 bg-white/90 px-3 py-1.5 rounded-full shadow-sm border animate-in fade-in slide-in-from-top-2 duration-300 delay-100">
-                        <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
-                        <Camera className="h-3 w-3 text-slate-600" />
-                        <span className="text-xs font-medium text-slate-600">CAM</span>
                     </div>
                 )}
             </div>

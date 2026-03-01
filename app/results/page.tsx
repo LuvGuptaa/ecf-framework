@@ -6,9 +6,15 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Home, Download, Share2, Play, Eye, Monitor, Camera, Video } from "lucide-react"
-import type { TestSession } from "@/lib/types"
+import type { TestSession, ERPSession } from "@/lib/types"
 import { dataService } from "@/lib/data-service"
 import { useToast } from "@/hooks/use-toast"
+
+type HistorySession = TestSession | ERPSession
+
+const isERPSession = (session: HistorySession): session is ERPSession => {
+  return "taskType" in session
+}
 
 export default function ResultsPage() {
   const router = useRouter()
@@ -16,7 +22,7 @@ export default function ResultsPage() {
   const { toast } = useToast()
 
   const sessionId = searchParams.get("sessionId")
-  const [session, setSession] = useState<TestSession | null>(null)
+  const [session, setSession] = useState<HistorySession | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [localRecordings, setLocalRecordings] = useState<
     Array<{ type: "screen" | "camera"; url: string; blob: Blob }>
@@ -30,7 +36,10 @@ export default function ResultsPage() {
 
     const loadSession = async () => {
       try {
-        const sessionData = await dataService.fetchSession(sessionId)
+        let sessionData: HistorySession | null = await dataService.fetchSession(sessionId)
+        if (!sessionData) {
+          sessionData = await dataService.fetchERPSession(sessionId)
+        }
         setSession(sessionData)
       } catch (error) {
         console.error("Error loading session:", error)
@@ -82,18 +91,29 @@ export default function ResultsPage() {
     }
   }, [sessionId])
 
-  const calculateStats = (trials: any[]) => {
+  const calculateStats = (session: HistorySession | null) => {
+    if (!session) return null
+    const trials = session.trials || []
     if (!trials.length) return null
 
-    const reactionTimes = trials.map((t) => t.reactionTime)
-    const totalWrongTaps = trials.reduce((sum, t) => sum + t.wrongTaps.length, 0)
+    const reactionTimes = trials.map((t: any) => t.reactionTime)
+    let totalWrongTaps = 0
+    let correctTrials = 0
+
+    if (isERPSession(session)) {
+      correctTrials = trials.filter((t: any) => !t.timedOut).length
+      totalWrongTaps = trials.length - correctTrials
+    } else {
+      totalWrongTaps = trials.reduce((sum: number, t: any) => sum + (t.wrongTaps?.length || 0), 0)
+      correctTrials = trials.filter((t: any) => t.isCorrect).length
+    }
 
     return {
-      averageReactionTime: reactionTimes.reduce((sum, rt) => sum + rt, 0) / reactionTimes.length,
+      averageReactionTime: reactionTimes.reduce((sum: number, rt: number) => sum + rt, 0) / reactionTimes.length,
       fastestReactionTime: Math.min(...reactionTimes),
       slowestReactionTime: Math.max(...reactionTimes),
       totalWrongTaps,
-      accuracy: ((trials.length - totalWrongTaps) / trials.length) * 100,
+      accuracy: (correctTrials / trials.length) * 100,
     }
   }
 
@@ -107,16 +127,18 @@ export default function ResultsPage() {
       },
       session: {
         id: session.id,
-        shape: session.shape,
-        gridSize: `${session.gridRows}x${session.gridCols}`,
+        taskType: isERPSession(session) ? session.taskType : session.shape,
+        gridSize: isERPSession(session)
+          ? ("gridSize" in session.taskConfig ? `${session.taskConfig.gridSize}x${session.taskConfig.gridSize}` : "N/A")
+          : `${session.gridRows}x${session.gridCols}`,
         createdAt: session.createdAt,
         completedAt: session.completedAt,
       },
-      trials: session.trials,
-      summary: calculateStats(session.trials),
+      trials: session.trials || [],
+      summary: calculateStats(session),
       recordings: {
-        screen: session.screenRecordingUrl,
-        camera: session.cameraRecordingUrl,
+        screen: "screenRecordingUrl" in session ? session.screenRecordingUrl : undefined,
+        camera: "cameraRecordingUrl" in session ? session.cameraRecordingUrl : undefined,
       },
     }
 
@@ -213,7 +235,7 @@ export default function ResultsPage() {
     )
   }
 
-  const stats = calculateStats(session.trials)
+  const stats = calculateStats(session)
 
   return (
     <div className="min-h-screen bg-background">
@@ -319,7 +341,7 @@ export default function ResultsPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {session.trials.map((trial, index) => (
+              {(session.trials || []).map((trial: any, index: number) => (
                 <div key={trial.id} className="border rounded-lg overflow-hidden">
                   {/* Trial Header */}
                   <div className="flex items-center justify-between p-3 bg-muted/30">
@@ -329,15 +351,23 @@ export default function ResultsPage() {
                       {trial.frameRate && <span className="text-xs text-muted-foreground">{trial.frameRate}fps</span>}
                     </div>
                     <div className="flex items-center gap-2">
-                      {trial.wrongTaps.length > 0 && <Badge variant="destructive">{trial.wrongTaps.length} wrong</Badge>}
-                      <Badge variant={trial.wrongTaps.length === 0 ? "default" : "secondary"}>
-                        {trial.wrongTaps.length === 0 ? "Perfect" : "Completed"}
-                      </Badge>
+                      {!isERPSession(session) ? (
+                        <>
+                          {trial.wrongTaps?.length > 0 && <Badge variant="destructive">{trial.wrongTaps.length} wrong</Badge>}
+                          <Badge variant={trial.wrongTaps?.length === 0 ? "default" : "secondary"}>
+                            {trial.wrongTaps?.length === 0 ? "Perfect" : "Completed"}
+                          </Badge>
+                        </>
+                      ) : (
+                        <Badge variant={trial.timedOut ? "destructive" : "default"}>
+                          {trial.timedOut ? "Timeout" : "Completed"}
+                        </Badge>
+                      )}
                     </div>
                   </div>
 
                   {/* Tap Details */}
-                  {trial.wrongTaps.length > 0 && (
+                  {!isERPSession(session) && trial.wrongTaps?.length > 0 && (
                     <div className="p-3 space-y-2 bg-background">
                       <p className="text-xs font-medium text-muted-foreground mb-2">Tap Sequence:</p>
                       {trial.wrongTaps.map((tap, tapIndex) => (
