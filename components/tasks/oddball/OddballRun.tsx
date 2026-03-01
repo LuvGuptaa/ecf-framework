@@ -7,6 +7,7 @@ import { dataService } from "@/lib/data-service"
 import { trackingService } from "@/lib/tracking-service"
 import { SinglePatchDisplay } from "@/components/tasks/shared/ERPDisplay"
 import { JsPsychWrapper } from "@/components/tasks/shared/JsPsychWrapper"
+import { useERPStore } from "@/lib/stores/erp-store"
 import type { OddballConfig, PatchType } from "@/lib/types"
 
 import htmlKeyboardResponse from "@jspsych/plugin-html-keyboard-response"
@@ -47,6 +48,7 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
             taskConfig: config,
         })
         setSessionId(id)
+        useERPStore.getState().setSessionMeta({ sessionId: id, totalTrials: config.numberOfTrials })
 
         const newTimeline = []
 

@@ -28,11 +28,15 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
   const cameraRecordingServiceRef = useRef<RecordingService | null>(null)
 
   useEffect(() => {
+    useERPStore.getState().resetSessionState()
+    useTestStore.getState().resetSessionState()
+  }, [])
+
+  useEffect(() => {
     if (!task) {
       router.push("/")
       return
     }
-
     if (!participant) {
       router.push(`/${taskId}`)
     }
@@ -48,11 +52,11 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
       const camRecorder = new RecordingService((state) => setIsCameraRecording(state.isRecording))
       cameraRecordingServiceRef.current = camRecorder
       await camRecorder.startStreamRecording(cameraStream)
-      // Permission granted, recording started — move to calibration
       setPhase("pre-calibration")
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as { name?: string }
       setPermissionError(
-        err?.name === "NotAllowedError"
+        error?.name === "NotAllowedError"
           ? "Camera permission was denied. Please allow camera access and try again."
           : "Could not access camera. Please check your device and try again."
       )
@@ -63,13 +67,11 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
     setPhase("task")
   }, [])
 
-  // Currently not used in new flow
-  // const handleComplete = useCallback((data?: Record<string, unknown>) => {
-  //   setPhase("post-calibration")
-  // }, [])
+  const handleTaskComplete = useCallback(() => {
+    setPhase("post-calibration")
+  }, [])
 
   const handlePostCalibrationComplete = useCallback(async () => {
-    // Stop camera recording and save
     if (cameraRecordingServiceRef.current) {
       const blob = await cameraRecordingServiceRef.current.stopRecording()
       const erpSessionId = useERPStore.getState().sessionId
@@ -95,7 +97,6 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
 
   if (!task || !participant) return null
 
-  // Permission prompt: ask user to grant camera access
   if (phase === "permission") {
     return (
       <div className="w-full h-screen bg-black flex flex-col items-center justify-center">
@@ -128,7 +129,6 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
     )
   }
 
-  // Pre-calibration
   if (phase === "pre-calibration") {
     return (
       <>
@@ -141,7 +141,6 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
     )
   }
 
-  // Post-calibration
   if (phase === "post-calibration") {
     return (
       <>
@@ -154,12 +153,10 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
     )
   }
 
-  // Done
   if (phase === "done") {
     return null
   }
 
-  // Task phase
   return (
     <>
       <task.RunComponent

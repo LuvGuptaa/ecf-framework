@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { getTask } from "@/lib/tasks/registry"
 import { useTestStore } from "@/lib/stores/test-store"
@@ -11,15 +11,9 @@ export default function TaskConfigPage({ params }: { params: { taskId: string } 
   const router = useRouter()
   const searchParams = useSearchParams()
   const { taskId } = params
-  const participantId = searchParams.get("participantId")
 
   const task = getTask(taskId)
   const store = useTestStore()
-
-  // If we have a participantId in URL but not in store (e.g. refresh), 
-  // we might want to fetch it. For now, we assume the user came from Home 
-  // or the store is persisted/rehydrated if we had that logic.
-  // Since we rely on the store for the flow: 
 
   useEffect(() => {
     if (!task) {
@@ -30,12 +24,7 @@ export default function TaskConfigPage({ params }: { params: { taskId: string } 
   if (!task) return null
 
   const handleComplete = (data?: Record<string, unknown>) => {
-    // Save config to store
     store.setConfig(data)
-
-    // Navigate to run
-    // We keep participantId in query or just rely on store? 
-    // Let's keep it clean and rely on store for "session" context.
     router.push(`/${taskId}/run`)
   }
 
@@ -51,8 +40,7 @@ export default function TaskConfigPage({ params }: { params: { taskId: string } 
           <h1 className="text-3xl font-bold text-slate-900">{task.title}</h1>
           <p className="text-slate-600 mt-2">{task.description}</p>
         </div>
-
-        <task.ConfigComponent onConfigComplete={handleConfigComplete} />
+        <task.ConfigComponent onConfigComplete={handleComplete} />
       </div>
     </div>
   )

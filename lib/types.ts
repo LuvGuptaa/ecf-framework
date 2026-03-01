@@ -38,8 +38,8 @@ export interface Trial {
   stimulusDisplayTime?: number
   firstTapTime?: number
   frameRate?: number
-  deviceInfo?: any
-  performanceMetrics?: any
+  deviceInfo?: Record<string, unknown>
+  performanceMetrics?: Record<string, unknown>
 }
 
 export interface TapCoordinate {
@@ -158,17 +158,19 @@ export interface ERPKeypress {
 
 export interface ERPTrialData {
   sessionId: string
-  trialNumber: number
-  taskType: ERPTaskType
-  patches: PatchItem[]
-  keypresses: ERPKeypress[]
-  trialStartTime: number
-  trialEndTime: number
-  reactionTime: number
-  timedOut: boolean
+  trialNumber?: number
+  taskType?: ERPTaskType
+  patches?: PatchItem[]
+  keypresses?: ERPKeypress[]
+  trialStartTime?: number
+  trialEndTime?: number
+  reactionTime?: number
+  timedOut?: boolean
+  isCorrect?: boolean
   stimulusSequence?: PatchType[]
-  deviceInfo?: any
-  performanceMetrics?: any
+  deviceInfo?: Record<string, unknown>
+  performanceMetrics?: Record<string, unknown>
+  jsPsychData?: Record<string, unknown> // added to store raw jsPsych JSON payload
 }
 
 export interface ERPSession {

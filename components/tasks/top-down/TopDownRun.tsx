@@ -1,15 +1,15 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { renderToString } from "react-dom/server"
 import { dataService } from "@/lib/data-service"
 import { trackingService } from "@/lib/tracking-service"
 import { ERPDisplay } from "@/components/tasks/shared/ERPDisplay"
 import { JsPsychWrapper } from "@/components/tasks/shared/JsPsychWrapper"
+import { useERPStore } from "@/lib/stores/erp-store"
 import type { TopDownConfig, PatchItem } from "@/lib/types"
 
-// Plugins
 import htmlKeyboardResponse from "@jspsych/plugin-html-keyboard-response"
 import callFunctionPlugin from "@jspsych/plugin-call-function"
 
@@ -66,8 +66,13 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
     const [sessionId, setSessionId] = useState<string | null>(null)
     const [timeline, setTimeline] = useState<Record<string, unknown>[]>([])
 
+    useEffect(() => {
+        setPhase("idle")
+        setSessionId(null)
+        setTimeline([])
+    }, [])
+
     const startTask = async () => {
-        // 1. Create session in DB
         const { id } = await dataService.createERPSession({
             participantId: participant.id,
             participantName: participant.name,
@@ -75,11 +80,10 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
             taskConfig: config,
         })
         setSessionId(id)
+        useERPStore.getState().setSessionMeta({ sessionId: id, totalTrials: config.numberOfTrials })
 
-        // 2. Build jsPsych timeline
-        const newTimeline = []
+        const newTimeline: Record<string, unknown>[] = []
 
-        // Initial fixation/calibration start marker
         newTimeline.push({
             type: callFunctionPlugin,
             func: () => {
@@ -94,30 +98,23 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
                 <ERPDisplay patches={patches} gridSize={config.gridSize} fullScreen patchSizeCm={config.patchSizeCm} />
             )
 
-            // ITI (Inter-trial interval)
             newTimeline.push({
                 type: htmlKeyboardResponse,
                 stimulus: '<div style="width: 100vw; height: 100vh; background: black; display: flex; align-items: center; justify-content: center;"><div style="width: 48px; height: 48px; border: 4px solid rgba(255,255,255,0.2); border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite;"></div></div>',
                 choices: "NO_KEYS",
                 trial_duration: config.interTrialInterval,
-                trial_duration: config.interTrialInterval,
             })
 
-            // Main stimulus
             newTimeline.push({
                 type: htmlKeyboardResponse,
                 stimulus: trialHtml,
-                choices: [" "], // Spacebar
+                choices: [" "],
                 trial_duration: config.maxTrialTime,
                 data: {
                     task: 'top-down-trial',
                     trial_index: i,
                     isBottomUp,
                 },
-                on_start: () => {
-                },
-                on_finish: () => {
-                }
             })
         }
 
@@ -142,7 +139,7 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
     }, [onComplete, router, sessionId])
 
     return (
-        <div className="w-full h-screen bg-black text-white">
+        <div className="w-full h-screen bg-black text-white overflow-hidden">
             {phase === "idle" && (
                 <div className="flex flex-col items-center justify-center h-full space-y-8">
                     <h2 className="text-3xl font-bold">Top Down Search</h2>

@@ -5,11 +5,11 @@ export interface TaskDefinition {
     title: string
     description: string
     ConfigComponent: ComponentType<{
-        onConfigComplete: (config: any) => void
+        onConfigComplete: (config: Record<string, unknown>) => void
     }>
     RunComponent: ComponentType<{
-        config: any
-        participant: any
+        config: Record<string, unknown>
+        participant: Record<string, unknown>
         onComplete: () => void
     }>
 }

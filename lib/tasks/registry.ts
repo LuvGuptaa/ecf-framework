@@ -1,10 +1,21 @@
+import dynamic from "next/dynamic"
 import type { TaskDefinition } from "./types"
 import { ReactionConfig } from "@/components/tasks/reaction/ReactionConfig"
-import { ReactionRun } from "@/components/tasks/reaction/ReactionRun"
 import { TopDownConfigComponent } from "@/components/tasks/top-down/TopDownConfig"
-import { TopDownRun } from "@/components/tasks/top-down/TopDownRun"
 import { OddballConfigComponent } from "@/components/tasks/oddball/OddballConfig"
-import { OddballRun } from "@/components/tasks/oddball/OddballRun"
+
+const ReactionRun = dynamic(
+    () => import("@/components/tasks/reaction/ReactionRun").then(mod => mod.ReactionRun),
+    { ssr: false }
+)
+const TopDownRun = dynamic(
+    () => import("@/components/tasks/top-down/TopDownRun").then(mod => mod.TopDownRun),
+    { ssr: false }
+)
+const OddballRun = dynamic(
+    () => import("@/components/tasks/oddball/OddballRun").then(mod => mod.OddballRun),
+    { ssr: false }
+)
 
 export const tasks: Record<string, TaskDefinition> = {
     "reaction-time": {

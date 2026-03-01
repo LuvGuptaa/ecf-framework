@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -26,7 +26,7 @@ import {
   Trash2,
   Loader2,
 } from "lucide-react"
-import type { TestSession, ERPSession } from "@/lib/types"
+import type { TestSession, ERPSession, Trial, ERPTrialData } from "@/lib/types"
 
 type HistorySession = TestSession | ERPSession
 
@@ -64,16 +64,13 @@ export default function HistoryPage() {
     sortBy: "newest",
   })
 
-  // Multi-select state
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set())
 
-  // Modal State
   const [deleteSessionTarget, setDeleteSessionTarget] = useState<HistorySession | null>(null)
   const [isDeletingMultiple, setIsDeletingMultiple] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  // Load all sessions (in a real app, you'd implement pagination)
-  const loadSessions = async () => {
+  const loadSessions = useCallback(async () => {
     setIsLoading(true)
     try {
       const [classicSessions, erpSessions] = await Promise.all([
@@ -95,17 +92,15 @@ export default function HistoryPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [toast])
 
   useEffect(() => {
     loadSessions()
-  }, [])
+  }, [loadSessions])
 
-  // Apply filters whenever filters or sessions change
   useEffect(() => {
     let filtered = [...sessions]
 
-    // Search filter
     if (filters.searchTerm) {
       const searchLower = filters.searchTerm.toLowerCase()
       filtered = filtered.filter(
@@ -115,7 +110,6 @@ export default function HistoryPage() {
       )
     }
 
-    // Shape / Task Type filter
     if (filters.shapeFilter !== "all") {
       filtered = filtered.filter((session) => {
         if (isERPSession(session)) {
@@ -125,7 +119,6 @@ export default function HistoryPage() {
       })
     }
 
-    // Date range filter
     if (filters.dateRange !== "all") {
       const now = new Date()
       const filterDate = new Date()
@@ -147,7 +140,6 @@ export default function HistoryPage() {
       }
     }
 
-    // Sort
     filtered.sort((a, b) => {
       switch (filters.sortBy) {
         case "newest":
@@ -156,10 +148,14 @@ export default function HistoryPage() {
           return a.createdAt.getTime() - b.createdAt.getTime()
         case "name":
           return a.participantName.localeCompare(b.participantName)
-        case "performance":
-          const avgA = (a.trials && a.trials.length > 0) ? a.trials.reduce((sum: number, t: any) => sum + t.reactionTime, 0) / a.trials.length : 0
-          const avgB = (b.trials && b.trials.length > 0) ? b.trials.reduce((sum: number, t: any) => sum + t.reactionTime, 0) / b.trials.length : 0
-          return avgA - avgB
+        case "performance": {
+          const getAvg = (s: HistorySession): number => {
+            const trials = s.trials
+            if (!trials || trials.length === 0) return 0
+            return trials.reduce((sum: number, t: Trial | ERPTrialData) => sum + ((t as { reactionTime?: number }).reactionTime ?? 0), 0) / trials.length
+          }
+          return getAvg(a) - getAvg(b)
+        }
         default:
           return 0
       }
@@ -172,7 +168,6 @@ export default function HistoryPage() {
     setFilters((prev) => ({ ...prev, [key]: value }))
   }
 
-  // Multi-select helpers
   const toggleSelection = (sessionId: string) => {
     setSelectedSessionIds((prev) => {
       const next = new Set(prev)
@@ -263,25 +258,23 @@ export default function HistoryPage() {
       }
     }
 
-    const reactionTimes = trials.map((t: any) => t.reactionTime)
+    const reactionTimes = trials.map((t: Trial | ERPTrialData) => (t as { reactionTime?: number }).reactionTime ?? 0)
     let totalWrongTaps = 0
     let correctTrials = 0
 
     if (isERPSession(session)) {
-      // For ERP, we assume a trial is "correct" if it didn't time out, or based on specific logic.
-      // We'll just define it simply here:
-      correctTrials = trials.filter((t: any) => !t.timedOut).length
+      correctTrials = (trials as ERPTrialData[]).filter((t) => !t.timedOut).length
       totalWrongTaps = trials.length - correctTrials
     } else {
-      totalWrongTaps = trials.reduce((sum: number, t: any) => sum + (t.wrongTaps?.length || 0), 0)
-      correctTrials = trials.filter((t: any) => t.isCorrect).length
+      totalWrongTaps = (trials as Trial[]).reduce((sum, t) => sum + (t.wrongTaps?.length || 0), 0)
+      correctTrials = (trials as Trial[]).filter((t) => t.isCorrect).length
     }
 
     return {
       averageReactionTime: reactionTimes.reduce((sum: number, rt: number) => sum + rt, 0) / reactionTimes.length,
       totalWrongTaps,
       accuracy: (correctTrials / trials.length) * 100,
-      completionRate: session.completedAt ? 100 : (trials.length / 10) * 100, // Assuming 10 trials
+      completionRate: session.completedAt ? 100 : (trials.length / 10) * 100,
     }
   }
 
@@ -299,21 +292,20 @@ export default function HistoryPage() {
         completedAt: session.completedAt?.toISOString(),
       },
       statistics: stats,
-      trials: (session.trials || []).map((trial: any) => ({
-        trialNumber: trial.trialNumber,
+      trials: (session.trials || []).map((trial: Trial | ERPTrialData) => ({
+        trialNumber: (trial as Trial).trialNumber,
         reactionTime: trial.reactionTime,
-        isCorrect: trial.isCorrect !== undefined ? trial.isCorrect : !trial.timedOut,
-        wrongTapCount: trial.wrongTaps ? trial.wrongTaps.length : (trial.timedOut ? 1 : 0),
-        oddShapeIndex: trial.oddShapeIndex,
+        isCorrect: trial.isCorrect !== undefined ? trial.isCorrect : !(trial as ERPTrialData).timedOut,
+        wrongTapCount: (trial as Trial).wrongTaps ? (trial as Trial).wrongTaps.length : ((trial as ERPTrialData).timedOut ? 1 : 0),
+        oddShapeIndex: (trial as Trial).oddShapeIndex,
         coordinates: {
-          correctTap: trial.correctTap,
-          wrongTaps: trial.wrongTaps,
+          correctTap: (trial as Trial).correctTap,
+          wrongTaps: (trial as Trial).wrongTaps,
         },
-        deviceInfo: trial.deviceInfo,
-        performanceMetrics: trial.performanceMetrics,
-        // ERP specific additions:
-        keypresses: trial.keypresses,
-        patches: trial.patches,
+        deviceInfo: (trial as Trial).deviceInfo,
+        performanceMetrics: (trial as Trial).performanceMetrics,
+        keypresses: (trial as ERPTrialData).keypresses,
+        patches: (trial as ERPTrialData).patches,
       })),
     }
 
@@ -380,7 +372,6 @@ export default function HistoryPage() {
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-6xl mx-auto space-y-6">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Session History</h1>
@@ -398,7 +389,6 @@ export default function HistoryPage() {
           </div>
         </div>
 
-        {/* Filters */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -501,7 +491,6 @@ export default function HistoryPage() {
           </CardContent>
         </Card>
 
-        {/* Sessions Grid */}
         {filteredSessions.length === 0 ? (
           <Card>
             <CardContent className="pt-6">
@@ -528,7 +517,7 @@ export default function HistoryPage() {
             {filteredSessions.map((session) => {
               const stats = calculateSessionStats(session)
               const trialsLen = session.trials?.length || 0
-              let ShapeIcon = Target // Default task icon
+              let ShapeIcon = Target
               let taskLabel = ""
               let gridLabel = ""
 
@@ -578,7 +567,6 @@ export default function HistoryPage() {
                   </CardHeader>
 
                   <CardContent className="space-y-4">
-                    {/* Session Info */}
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div>
                         <span className="text-muted-foreground">Grid:</span>
@@ -590,7 +578,6 @@ export default function HistoryPage() {
                       </div>
                     </div>
 
-                    {/* Performance Stats */}
                     {trialsLen > 0 && (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-sm">
@@ -618,7 +605,6 @@ export default function HistoryPage() {
                       </div>
                     )}
 
-                    {/* Actions */}
                     <div className="flex gap-2 pt-2">
                       <Button
                         variant="outline"
@@ -644,7 +630,6 @@ export default function HistoryPage() {
         )}
       </div>
 
-      {/* Custom Confirmation Modal */}
       {(deleteSessionTarget || isDeletingMultiple) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
           <div className="bg-card text-card-foreground border rounded-lg shadow-lg w-full max-w-md p-6 m-4 animate-in fade-in zoom-in-95 duration-200">
