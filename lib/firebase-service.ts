@@ -514,23 +514,27 @@ export const getERPSession = async (sessionId: string): Promise<ERPSession | nul
         orderBy("trialNumber", "asc"),
       )
       const trialsSnapshot = await getDocs(trialsQuery)
-      trials = trialsSnapshot.docs.map((trialDoc) => ({
-        id: trialDoc.id,
-        ...trialDoc.data(),
-        createdAt: trialDoc.data().createdAt?.toDate(),
-      })) as ERPTrialData[]
+      trials = trialsSnapshot.docs.map((trialDoc) => {
+        return {
+          id: trialDoc.id,
+          ...trialDoc.data(),
+          createdAt: trialDoc.data().createdAt?.toDate(),
+        } as unknown as ERPTrialData
+      })
     } catch {
       const trialsQuery = query(
         collection(db, "erp_trials"),
         where("sessionId", "==", sessionId),
       )
       const trialsSnapshot = await getDocs(trialsQuery)
-      trials = trialsSnapshot.docs.map((trialDoc) => ({
-        id: trialDoc.id,
-        ...trialDoc.data(),
-        createdAt: trialDoc.data().createdAt?.toDate(),
-      })) as ERPTrialData[]
-      trials.sort((a, b) => a.trialNumber - b.trialNumber)
+      trials = trialsSnapshot.docs.map((trialDoc) => {
+        return {
+          id: trialDoc.id,
+          ...trialDoc.data(),
+          createdAt: trialDoc.data().createdAt?.toDate(),
+        } as unknown as ERPTrialData
+      })
+      trials.sort((a, b) => (a.trialNumber ?? 0) - (b.trialNumber ?? 0))
     }
 
     return {
@@ -563,23 +567,27 @@ export const getAllERPSessions = async (): Promise<ERPSession[]> => {
           orderBy("trialNumber", "asc"),
         )
         const trialsSnapshot = await getDocs(trialsQuery)
-        trials = trialsSnapshot.docs.map((trialDoc) => ({
-          id: trialDoc.id,
-          ...trialDoc.data(),
-          createdAt: trialDoc.data().createdAt?.toDate(),
-        })) as ERPTrialData[]
+        trials = trialsSnapshot.docs.map((trialDoc) => {
+          return {
+            id: trialDoc.id,
+            ...trialDoc.data(),
+            createdAt: trialDoc.data().createdAt?.toDate(),
+          } as unknown as ERPTrialData
+        })
       } catch {
         const trialsQuery = query(
           collection(db, "erp_trials"),
           where("sessionId", "==", docSnap.id),
         )
         const trialsSnapshot = await getDocs(trialsQuery)
-        trials = trialsSnapshot.docs.map((trialDoc) => ({
-          id: trialDoc.id,
-          ...trialDoc.data(),
-          createdAt: trialDoc.data().createdAt?.toDate(),
-        })) as ERPTrialData[]
-        trials.sort((a, b) => a.trialNumber - b.trialNumber)
+        trials = trialsSnapshot.docs.map((trialDoc) => {
+          return {
+            id: trialDoc.id,
+            ...trialDoc.data(),
+            createdAt: trialDoc.data().createdAt?.toDate(),
+          } as unknown as ERPTrialData
+        })
+        trials.sort((a, b) => (a.trialNumber ?? 0) - (b.trialNumber ?? 0))
       }
 
       sessions.push({

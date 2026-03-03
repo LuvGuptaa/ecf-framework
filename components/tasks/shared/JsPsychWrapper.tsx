@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useRef, useEffect } from "react"
 import "jspsych/css/jspsych.css"
 
 import { dataService } from "@/lib/data-service"
@@ -21,16 +21,20 @@ export function JsPsychWrapper({
     onFinish,
 }: JsPsychWrapperProps) {
     const containerRef = useRef<HTMLDivElement>(null)
-    const [isRunning, setIsRunning] = useState(false)
+    const initRef = useRef(false)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const jsPsychRef = useRef<any>(null)
 
     useEffect(() => {
-        if (!containerRef.current || isRunning) return
-        setIsRunning(true)
+        if (!containerRef.current || initRef.current) return
+        initRef.current = true
+
+        let isCancelled = false
 
         const runExperiment = async () => {
             const { initJsPsych } = await import('jspsych')
+
+            if (isCancelled) return
 
             const jsPsych = initJsPsych({
                 display_element: containerRef.current!,
@@ -80,15 +84,53 @@ export function JsPsychWrapper({
         runExperiment()
 
         return () => {
+            isCancelled = true
             if (jsPsychRef.current) {
                 try {
                     jsPsychRef.current.endExperiment()
                 } catch { /* already ended */ }
             }
         }
-    }, [timeline, isRunning, participantId, sessionId, taskName, onFinish])
+    }, [timeline, participantId, sessionId, taskName, onFinish])
+
+    // Lock body scroll while experiment is running
+    useEffect(() => {
+        const html = document.documentElement
+        const body = document.body
+        html.style.overflow = 'hidden'
+        body.style.overflow = 'hidden'
+        html.style.height = '100vh'
+        body.style.height = '100vh'
+        return () => {
+            html.style.overflow = ''
+            body.style.overflow = ''
+            html.style.height = ''
+            body.style.height = ''
+        }
+    }, [])
 
     return (
-        <div className="w-full h-screen overflow-hidden bg-black" ref={containerRef} />
+        <>
+            <style dangerouslySetInnerHTML={{
+                __html: `
+                .jspsych-display-element {
+                    max-height: 100vh !important;
+                    height: 100vh !important;
+                    overflow: hidden !important;
+                }
+                .jspsych-content-wrapper {
+                    max-height: 100vh !important;
+                    overflow: hidden !important;
+                }
+                .jspsych-content {
+                    max-height: 100vh !important;
+                    overflow: hidden !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                }
+            `}} />
+            <div className="w-full h-screen overflow-hidden bg-black" ref={containerRef} />
+        </>
     )
 }

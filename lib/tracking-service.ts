@@ -1,5 +1,28 @@
 // Advanced tracking service for precise coordinate and timing measurement
 
+export interface DetailedTapCoordinate {
+  screenX: number
+  screenY: number
+  clientX: number
+  clientY: number
+  pageX: number
+  pageY: number
+  offsetX: number
+  offsetY: number
+  coordinatesBottomLeft: { x: number; y: number }
+  elementDimensions: { width: number; height: number }
+  timestamp: number
+  performanceTimestamp: number
+  reactionTime: number
+  pressure: number
+  pointerType: "mouse" | "touch" | "pen"
+  cellIndex: number
+  gridPosition: { row: number; col: number }
+  isCorrect: boolean
+  devicePixelRatio: number
+  viewportSize: { width: number; height: number }
+}
+
 export interface TimingMeasurement {
   trialStartTime: number
   stimulusDisplayTime: number

@@ -160,7 +160,7 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
     }, [onComplete, router, sessionId])
 
     return (
-        <div className="w-full h-screen bg-black text-white flex flex-col items-center justify-center">
+        <div className="w-full h-screen bg-black text-white flex flex-col items-center justify-center overflow-hidden">
             {phase === "idle" && (
                 <div className="text-center space-y-8">
                     <h2 className="text-3xl font-bold">Visual Oddball</h2>
@@ -176,15 +176,13 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
             )}
 
             {phase === "running" && sessionId && (
-                <div className="absolute inset-0">
-                    <JsPsychWrapper
-                        timeline={timeline}
-                        participantId={participant.id}
-                        sessionId={sessionId}
-                        taskName="visual-oddball"
-                        onFinish={handleFinish}
-                    />
-                </div>
+                <JsPsychWrapper
+                    timeline={timeline}
+                    participantId={participant.id}
+                    sessionId={sessionId}
+                    taskName="visual-oddball"
+                    onFinish={handleFinish}
+                />
             )}
 
             {phase === "complete" && (

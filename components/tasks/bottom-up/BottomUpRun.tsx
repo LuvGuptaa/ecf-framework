@@ -120,7 +120,7 @@ export function BottomUpRun({ config, participant, onComplete }: BottomUpRunProp
     }, [onComplete, router, sessionId])
 
     return (
-        <div className="w-full h-screen bg-black text-white">
+        <div className="w-full h-screen bg-black text-white overflow-hidden">
             {phase === "idle" && (
                 <div className="flex flex-col items-center justify-center h-full space-y-8">
                     <h2 className="text-3xl font-bold">Bottom Up Search</h2>
