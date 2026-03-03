@@ -22,7 +22,8 @@ export function JsPsychWrapper({
 }: JsPsychWrapperProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const [isRunning, setIsRunning] = useState(false)
-    const jsPsychRef = useRef<ReturnType<typeof import('jspsych')> extends Promise<infer T> ? T extends { initJsPsych: infer F } ? F extends (...args: unknown[]) => infer R ? R : null : null : null>(null)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const jsPsychRef = useRef<any>(null)
 
     useEffect(() => {
         if (!containerRef.current || isRunning) return
@@ -61,6 +62,7 @@ export function JsPsychWrapper({
                     }
 
                     const accuracy = taskTrials.length > 0 ? (correctCount / taskTrials.length) * 100 : 0
+                    console.log(`[JsPsych] Task accuracy: ${accuracy.toFixed(1)}%`)
 
                     await dataService.completeERPSession(sessionId, {
                         completedAt: new Date(),
@@ -71,7 +73,8 @@ export function JsPsychWrapper({
             })
 
             jsPsychRef.current = jsPsych
-            jsPsych.run(timeline)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            jsPsych.run(timeline as any)
         }
 
         runExperiment()
@@ -80,7 +83,7 @@ export function JsPsychWrapper({
             if (jsPsychRef.current) {
                 try {
                     jsPsychRef.current.endExperiment()
-                } catch (_) { /* already ended */ }
+                } catch { /* already ended */ }
             }
         }
     }, [timeline, isRunning, participantId, sessionId, taskName, onFinish])

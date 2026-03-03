@@ -79,7 +79,6 @@ export function BottomUpRun({ config, participant, onComplete }: BottomUpRunProp
                 stimulus: '<div style="width: 100vw; height: 100vh; background: black; display: flex; align-items: center; justify-content: center;"><div style="width: 48px; height: 48px; border: 4px solid rgba(255,255,255,0.2); border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite;"></div></div>',
                 choices: "NO_KEYS",
                 trial_duration: config.interTrialInterval,
-                trial_duration: config.interTrialInterval,
             })
 
             // Stimulus

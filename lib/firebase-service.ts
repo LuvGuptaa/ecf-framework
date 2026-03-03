@@ -74,7 +74,7 @@ export const getParticipant = async (id: string): Promise<Participant | null> =>
       } as Participant
     }
     return null
-  } catch (error) {
+  } catch {
     return null
   }
 }
@@ -147,7 +147,7 @@ export const getTestSession = async (sessionId: string): Promise<TestSession | n
         ...trialDoc.data(),
         createdAt: trialDoc.data().createdAt.toDate(),
       })) as Trial[]
-    } catch (indexError) {
+    } catch {
       const trialsQuery = query(
         collection(db, "trials"),
         where("sessionId", "==", sessionId),
@@ -218,7 +218,7 @@ export const getParticipantSessions = async (participantId: string): Promise<Tes
           ...trialDoc.data(),
           createdAt: trialDoc.data().createdAt.toDate(),
         })) as Trial[]
-      } catch (indexError) {
+      } catch {
         const trialsQuery = query(
           collection(db, "trials"),
           where("sessionId", "==", doc.id),
@@ -242,7 +242,7 @@ export const getParticipantSessions = async (participantId: string): Promise<Tes
     }
 
     return sessions
-  } catch (error) {
+  } catch {
     return []
   }
 }
@@ -282,7 +282,7 @@ export const getAllSessions = async (
           ...trialDoc.data(),
           createdAt: trialDoc.data().createdAt.toDate(),
         })) as Trial[]
-      } catch (indexError) {
+      } catch {
         const trialsQuery = query(
           collection(db, "trials"),
           where("sessionId", "==", doc.id),
@@ -313,7 +313,7 @@ export const getAllSessions = async (
       lastDoc: lastVisible || null,
       hasMore,
     }
-  } catch (error) {
+  } catch {
     return {
       sessions: [],
       lastDoc: null,
@@ -391,7 +391,7 @@ export const searchSessions = async (
           ...trialDoc.data(),
           createdAt: trialDoc.data().createdAt.toDate(),
         })) as Trial[]
-      } catch (indexError) {
+      } catch {
         const trialsQuery = query(
           collection(db, "trials"),
           where("sessionId", "==", doc.id),
@@ -415,7 +415,7 @@ export const searchSessions = async (
     }
 
     return sessions
-  } catch (error) {
+  } catch {
     return []
   }
 }
@@ -519,7 +519,7 @@ export const getERPSession = async (sessionId: string): Promise<ERPSession | nul
         ...trialDoc.data(),
         createdAt: trialDoc.data().createdAt?.toDate(),
       })) as ERPTrialData[]
-    } catch (indexError) {
+    } catch {
       const trialsQuery = query(
         collection(db, "erp_trials"),
         where("sessionId", "==", sessionId),
@@ -568,7 +568,7 @@ export const getAllERPSessions = async (): Promise<ERPSession[]> => {
           ...trialDoc.data(),
           createdAt: trialDoc.data().createdAt?.toDate(),
         })) as ERPTrialData[]
-      } catch (indexError) {
+      } catch {
         const trialsQuery = query(
           collection(db, "erp_trials"),
           where("sessionId", "==", docSnap.id),

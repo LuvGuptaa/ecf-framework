@@ -2,15 +2,12 @@
 
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Video, Camera, Monitor, Play, Pause, Square, Download, AlertCircle } from "lucide-react"
+import { Video, Camera, Monitor, Square, Download, AlertCircle } from "lucide-react"
 import { RecordingService, type RecordingState, downloadBlob } from "@/lib/recording-service"
 import { localDB } from "@/lib/local-db"
 import { useToast } from "@/hooks/use-toast"
-import type { Recording } from "@/lib/types"
 
 interface RecordingControlsProps {
   sessionId: string | null
@@ -23,201 +20,184 @@ export interface RecordingControlsRef {
 
 export const RecordingControls = forwardRef<RecordingControlsRef, RecordingControlsProps>(
   function RecordingControls({ sessionId, onRecordingStateChange }, ref) {
-  const { toast } = useToast()
-  const [screenRecorder, setScreenRecorder] = useState<RecordingService | null>(null)
-  const [cameraRecorder, setCameraRecorder] = useState<RecordingService | null>(null)
-  const [screenState, setScreenState] = useState<RecordingState>({ isRecording: false, isPaused: false, duration: 0 })
-  const [cameraState, setCameraState] = useState<RecordingState>({ isRecording: false, isPaused: false, duration: 0 })
-  const [isSupported, setIsSupported] = useState(false)
-  const [cameraAvailable, setCameraAvailable] = useState(false)
-  const [settings, setSettings] = useState({
-    enableScreen: true,
-    enableCamera: true,
-    enableAudio: false,
-  })
-  const [recordings, setRecordings] = useState<{
-    screen?: Blob
-    camera?: Blob
-  }>({})
+    const { toast } = useToast()
+    const [screenRecorder, setScreenRecorder] = useState<RecordingService | null>(null)
+    const [cameraRecorder, setCameraRecorder] = useState<RecordingService | null>(null)
+    const [screenState, setScreenState] = useState<RecordingState>({ isRecording: false, isPaused: false, duration: 0 })
+    const [cameraState, setCameraState] = useState<RecordingState>({ isRecording: false, isPaused: false, duration: 0 })
+    const [isSupported, setIsSupported] = useState(false)
+    const [cameraAvailable, setCameraAvailable] = useState(false)
+    const [settings, setSettings] = useState({
+      enableScreen: true,
+      enableCamera: true,
+      enableAudio: false,
+    })
+    const [recordings] = useState<{
+      screen?: Blob
+      camera?: Blob
+    }>({})
 
-  const intervalRef = useRef<NodeJS.Timeout>()
+    const intervalRef = useRef<NodeJS.Timeout>()
 
-  useEffect(() => {
-    // Check if recording is supported
-    setIsSupported(RecordingService.isSupported())
+    useEffect(() => {
+      setIsSupported(RecordingService.isSupported())
+      RecordingService.isCameraAvailable().then(setCameraAvailable)
 
-    // Check camera availability
-    RecordingService.isCameraAvailable().then(setCameraAvailable)
+      return () => {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current)
+        }
+      }
+    }, [])
 
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
+    useEffect(() => {
+      const recording = screenState.isRecording || cameraState.isRecording
+      onRecordingStateChange?.(recording)
+    }, [screenState.isRecording, cameraState.isRecording, onRecordingStateChange])
+
+    useImperativeHandle(ref, () => ({
+      stopRecording: async () => {
+        await stopRecording()
+      },
+    }))
+
+    const startRecording = async () => {
+      try {
+        console.log("[Recording] Starting recording with sessionId:", sessionId)
+        const promises: Promise<void>[] = []
+
+        if (settings.enableScreen) {
+          const recorder = new RecordingService(setScreenState)
+          setScreenRecorder(recorder)
+          promises.push(
+            recorder.startScreenRecording({
+              video: true,
+              audio: settings.enableAudio,
+            }),
+          )
+        }
+
+        if (settings.enableCamera && cameraAvailable) {
+          const recorder = new RecordingService(setCameraState)
+          setCameraRecorder(recorder)
+          promises.push(
+            recorder.startCameraRecording({
+              video: true,
+              audio: false, // Avoid audio feedback
+            }),
+          )
+        }
+
+        await Promise.all(promises)
+
+        intervalRef.current = setInterval(() => {
+          if (screenRecorder) {
+            setScreenState(screenRecorder.getState())
+          }
+          if (cameraRecorder) {
+            setCameraState(cameraRecorder.getState())
+          }
+        }, 1000)
+
+        toast({
+          title: "Recording Started",
+          description: "Screen and camera recording has begun.",
+        })
+      } catch (error) {
+        console.error("Error starting recording:", error)
+        toast({
+          title: "Recording Error",
+          description: "Failed to start recording. Please check permissions.",
+          variant: "destructive",
+        })
       }
     }
-  }, [])
 
-  useEffect(() => {
-    // Notify parent component of recording state changes
+    const stopRecording = async () => {
+      try {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current)
+        }
+
+        const promises: Promise<Blob | null>[] = []
+        if (screenRecorder) promises.push(screenRecorder.stopRecording())
+        if (cameraRecorder) promises.push(cameraRecorder.stopRecording())
+
+        const [screenBlob, cameraBlob] = await Promise.all(promises)
+
+        if (sessionId) {
+          if (screenBlob) {
+            await localDB.saveRecording({
+              id: `${sessionId}-screen`,
+              sessionId,
+              type: "screen",
+              blob: screenBlob,
+              createdAt: new Date(),
+            })
+          }
+          if (cameraBlob) {
+            await localDB.saveRecording({
+              id: `${sessionId}-camera`,
+              sessionId,
+              type: "camera",
+              blob: cameraBlob,
+              createdAt: new Date(),
+            })
+          }
+        }
+
+        setScreenRecorder(null)
+        setCameraRecorder(null)
+
+        toast({
+          title: "Recording Stopped",
+          description: "Your recordings have been saved locally.",
+        })
+      } catch (error) {
+        console.error("Error stopping recording:", error)
+        toast({
+          title: "Recording Error",
+          description: "Failed to stop or save the recording.",
+          variant: "destructive",
+        })
+      }
+    }
+
     const isRecording = screenState.isRecording || cameraState.isRecording
-    onRecordingStateChange?.(isRecording)
-  }, [screenState.isRecording, cameraState.isRecording, onRecordingStateChange])
 
-  // Expose stopRecording method to parent component
-  useImperativeHandle(ref, () => ({
-    stopRecording: async () => {
-      await stopRecording()
-    },
-  }))
-
-  const startRecording = async () => {
-    try {
-      console.log("[Recording] Starting recording with sessionId:", sessionId)
-      const promises: Promise<void>[] = []
-
-      if (settings.enableScreen) {
-        const recorder = new RecordingService(setScreenState)
-        setScreenRecorder(recorder)
-        promises.push(
-          recorder.startScreenRecording({
-            video: true,
-            audio: settings.enableAudio,
-          }),
-        )
+    const downloadRecording = (type: "screen" | "camera") => {
+      const blob = recordings[type]
+      if (blob) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
+        downloadBlob(blob, `${type}-recording-${timestamp}.webm`)
       }
-
-      if (settings.enableCamera && cameraAvailable) {
-        const recorder = new RecordingService(setCameraState)
-        setCameraRecorder(recorder)
-        promises.push(
-          recorder.startCameraRecording({
-            video: true,
-            audio: false, // Avoid audio feedback
-          }),
-        )
-      }
-
-      await Promise.all(promises)
-
-      // Start duration update interval
-      intervalRef.current = setInterval(() => {
-        if (screenRecorder) {
-          setScreenState(screenRecorder.getState())
-        }
-        if (cameraRecorder) {
-          setCameraState(cameraRecorder.getState())
-        }
-      }, 1000)
-
-      toast({
-        title: "Recording Started",
-        description: "Screen and camera recording has begun.",
-      })
-    } catch (error) {
-      console.error("Error starting recording:", error)
-      toast({
-        title: "Recording Error",
-        description: "Failed to start recording. Please check permissions.",
-        variant: "destructive",
-      })
     }
-  }
 
-  const stopRecording = async () => {
-    try {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-      }
-
-      const promises: Promise<Blob | null>[] = []
-      if (screenRecorder) promises.push(screenRecorder.stopRecording())
-      if (cameraRecorder) promises.push(cameraRecorder.stopRecording())
-
-      const [screenBlob, cameraBlob] = await Promise.all(promises)
-
-      if (sessionId) {
-        if (screenBlob) {
-          await localDB.saveRecording({
-            id: `${sessionId}-screen`,
-            sessionId,
-            type: "screen",
-            blob: screenBlob,
-            createdAt: new Date(),
-          })
-        }
-        if (cameraBlob) {
-          await localDB.saveRecording({
-            id: `${sessionId}-camera`,
-            sessionId,
-            type: "camera",
-            blob: cameraBlob,
-            createdAt: new Date(),
-          })
-        }
-      }
-
-      setScreenRecorder(null)
-      setCameraRecorder(null)
-
-      toast({
-        title: "Recording Stopped",
-        description: "Your recordings have been saved locally.",
-      })
-    } catch (error) {
-      console.error("Error stopping recording:", error)
-      toast({
-        title: "Recording Error",
-        description: "Failed to stop or save the recording.",
-        variant: "destructive",
-      })
+    const formatDuration = (ms: number): string => {
+      const seconds = Math.floor(ms / 1000)
+      const minutes = Math.floor(seconds / 60)
+      const remainingSeconds = seconds % 60
+      return `${minutes.toString().padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`
     }
-  }
 
-  const pauseRecording = () => {
-    screenRecorder?.pauseRecording()
-    cameraRecorder?.pauseRecording()
-  }
-
-  const resumeRecording = () => {
-    screenRecorder?.resumeRecording()
-    cameraRecorder?.resumeRecording()
-  }
-
-  const downloadRecording = (type: "screen" | "camera") => {
-    const blob = recordings[type]
-    if (blob) {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
-      downloadBlob(blob, `${type}-recording-${timestamp}.webm`)
-    }
-  }
-
-  const formatDuration = (ms: number): string => {
-    const seconds = Math.floor(ms / 1000)
-    const minutes = Math.floor(seconds / 60)
-    const remainingSeconds = seconds % 60
-    return `${minutes.toString().padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`
-  }
-
-  if (!isSupported) {
-    return (
-      <div className="p-4 rounded-lg border border-destructive/50 bg-destructive/10">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium">Recording Not Supported</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Your browser doesn't support screen or camera recording. You can still complete the test.
-            </p>
+    if (!isSupported) {
+      return (
+        <div className="p-4 rounded-lg border border-destructive/50 bg-destructive/10">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium">Recording Not Supported</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Your browser doesn&apos;t support screen or camera recording. You can still complete the test.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
-    )
-  }
+      )
+    }
 
-  const isRecording = screenState.isRecording || cameraState.isRecording
-  const isPaused = screenState.isPaused || cameraState.isPaused
-
-  return (
-    <div className="space-y-4">
+    return (
+      <div className="space-y-4">
         {/* Recording Settings */}
         {!isRecording && (
           <div className="grid gap-3">
@@ -335,6 +315,6 @@ export const RecordingControls = forwardRef<RecordingControlsRef, RecordingContr
             )}
           </div>
         )}
-    </div>
-  );
-});
+      </div>
+    );
+  });

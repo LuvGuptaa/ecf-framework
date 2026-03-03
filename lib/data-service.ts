@@ -5,7 +5,6 @@ import {
   updateTestSession,
   getTestSession,
   getAllSessions,
-  saveWrongTap,
   saveERPSession,
   saveERPTrial,
   updateERPSession,
@@ -15,7 +14,6 @@ import {
   deleteERPSession,
 } from "./firebase-service"
 import type {
-  DetailedTapCoordinate,
   Participant,
   TestSession,
   Trial,
@@ -39,7 +37,6 @@ type SessionInput = Pick<
   completedAt?: Date
 }
 type TrialInput = Omit<Trial, "id" | "createdAt">
-type RecordingVariant = "screen" | "camera"
 
 const logError = (message: string, error: unknown): Error => {
   console.error(`[DataService] Error: ${message}`, { error })

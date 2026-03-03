@@ -84,7 +84,7 @@ export function ReactionRun({ config, participant, onComplete }: ReactionRunProp
                 const { id } = await dataService.createSession({
                     participantId: participant.id,
                     participantName: participant.name,
-                    shape: shape as any,
+                    shape: shape as "up" | "down" | "left" | "right",
                     gridRows,
                     gridCols,
                 })
@@ -227,7 +227,7 @@ export function ReactionRun({ config, participant, onComplete }: ReactionRunProp
             frameRate: trackingService.getCurrentFrameRate(),
             deviceInfo,
             performanceMetrics,
-        } as any // Cast because Trial type might be strict about some fields
+        }
 
         pendingTrialsRef.current = [...pendingTrialsRef.current, trialData]
         state.completeTrial({ reactionTime, wrongTapCount: wrongTapsSnapshot.length, isCorrect: true })

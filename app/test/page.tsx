@@ -13,7 +13,6 @@ import { localDB } from "@/lib/local-db"
 import { CanvasRenderer } from "@/components/canvas-renderer"
 import { Camera, Monitor } from "lucide-react"
 
-// Keep shape icons config for param validation
 const shapeIcons = {
   up: true,
   down: true,
@@ -26,12 +25,10 @@ export default function TestPage() {
   const searchParams = useSearchParams()
   const { toast } = useToast()
 
-  // Refs
   const recordingServiceRef = useRef<RecordingService | null>(null)
   const cameraRecordingServiceRef = useRef<RecordingService | null>(null)
   const pendingTrialsRef = useRef<Array<Omit<Trial, "id" | "createdAt">>>([])
 
-  // Extract URL parameters
   const participantId = searchParams.get("participantId")
   const participantName = searchParams.get("participantName")
   const shapeParam = (searchParams.get("shape") as keyof typeof shapeIcons) || "up"
@@ -40,12 +37,10 @@ export default function TestPage() {
   const gridCols = Math.min(Math.max(Number.parseInt(searchParams.get("gridCols") ?? "4"), 1), 20)
   const numberOfTrials = Math.min(Math.max(Number.parseInt(searchParams.get("numberOfTrials") ?? "10"), 1), 100)
 
-  // State
   const [isRecording, setIsRecording] = useState(false)
   const [isCameraRecording, setIsCameraRecording] = useState(false)
   const [isReadyToStart, setIsReadyToStart] = useState(false)
 
-  // Store
   const sessionId = useTestStore((state) => state.sessionId)
   const currentTrial = useTestStore((state) => state.currentTrial)
   const totalTrials = useTestStore((state) => state.totalTrials)
@@ -86,7 +81,7 @@ export default function TestPage() {
     initializationStateRef.current = "running"
 
     const store = useTestStore.getState()
-    store.setConfig({ shape: shape as any, gridRows, gridCols, numberOfTrials })
+    store.setConfig({ shape: shape as "up" | "down" | "left" | "right", gridRows, gridCols, numberOfTrials })
     store.setParticipant({
       id: participantId,
       name: participantName,
@@ -103,7 +98,7 @@ export default function TestPage() {
         const { id } = await dataService.createSession({
           participantId,
           participantName,
-          shape: shape as any,
+          shape: shape as "up" | "down" | "left" | "right",
           gridRows,
           gridCols,
         })
@@ -128,20 +123,16 @@ export default function TestPage() {
     }
   }, [participantId, participantName, shape, gridRows, gridCols, numberOfTrials, router, toast])
 
-  // Recording Logic
   const handleCanvasReady = useCallback(async (canvas: HTMLCanvasElement) => {
-    if (recordingServiceRef.current) return // Already initialized
+    if (recordingServiceRef.current) return
 
-    // Start Screen (Canvas) Recording
     try {
-      console.log("[Test] Starting silent canvas recording...")
       const stream = canvas.captureStream(30)
       const recorder = new RecordingService((state) => {
-         setIsRecording(state.isRecording)
+        setIsRecording(state.isRecording)
       })
       recordingServiceRef.current = recorder
       await recorder.startStreamRecording(stream)
-      console.log("[Test] Canvas recording started.")
     } catch (e) {
       console.error("Failed to start canvas recording", e)
       toast({
@@ -151,26 +142,23 @@ export default function TestPage() {
       })
     }
 
-    // Start Camera Recording
     try {
-       console.log("[Test] Starting camera recording...")
-       const cameraStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
-          audio: false
-       })
-       const camRecorder = new RecordingService((state) => {
-          setIsCameraRecording(state.isRecording)
-       })
-       cameraRecordingServiceRef.current = camRecorder
-       await camRecorder.startStreamRecording(cameraStream)
-       console.log("[Test] Camera recording started.")
+      const cameraStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false
+      })
+      const camRecorder = new RecordingService((state) => {
+        setIsCameraRecording(state.isRecording)
+      })
+      cameraRecordingServiceRef.current = camRecorder
+      await camRecorder.startStreamRecording(cameraStream)
     } catch (e) {
-       console.warn("Camera access denied or failed", e)
-       toast({
-          title: "Camera Unavailable",
-          description: "Camera recording could not be started. Check permissions.",
-          variant: "default"
-       })
+      console.warn("Camera access denied or failed", e)
+      toast({
+        title: "Camera Unavailable",
+        description: "Camera recording could not be started. Check permissions.",
+        variant: "default"
+      })
     }
   }, [toast])
 
@@ -178,43 +166,41 @@ export default function TestPage() {
     if (!sessionId) return
 
     try {
-      // Stop Recordings
       const promises = []
 
       if (recordingServiceRef.current) {
-          promises.push(
-            recordingServiceRef.current.stopRecording().then(blob => {
-              if (blob) {
-                return localDB.saveRecording({
-                  id: `${sessionId}-screen`,
-                  sessionId,
-                  type: "screen",
-                  blob,
-                  createdAt: new Date()
-                })
-              }
-            })
-          )
+        promises.push(
+          recordingServiceRef.current.stopRecording().then(blob => {
+            if (blob) {
+              return localDB.saveRecording({
+                id: `${sessionId}-screen`,
+                sessionId,
+                type: "screen",
+                blob,
+                createdAt: new Date()
+              })
+            }
+          })
+        )
       }
 
       if (cameraRecordingServiceRef.current) {
-          promises.push(
-            cameraRecordingServiceRef.current.stopRecording().then(blob => {
-              if (blob) {
-                return localDB.saveRecording({
-                  id: `${sessionId}-camera`,
-                  sessionId,
-                  type: "camera",
-                  blob,
-                  createdAt: new Date()
-                })
-              }
-            })
-          )
+        promises.push(
+          cameraRecordingServiceRef.current.stopRecording().then(blob => {
+            if (blob) {
+              return localDB.saveRecording({
+                id: `${sessionId}-camera`,
+                sessionId,
+                type: "camera",
+                blob,
+                createdAt: new Date()
+              })
+            }
+          })
+        )
       }
 
       await Promise.all(promises)
-      console.log("[Test] Recordings saved.")
 
       const trialsToPersist = pendingTrialsRef.current
       if (trialsToPersist.length > 0) {
@@ -233,77 +219,70 @@ export default function TestPage() {
   }, [sessionId, router, toast])
 
   const handleCellTap = useCallback(async (cellIndex: number, event: React.MouseEvent | React.TouchEvent) => {
-      const state = useTestStore.getState()
-      if (!state.isTestActive || !state.sessionId || state.startTime === null || state.stimulusDisplayTime === null || state.oddShapeIndex === null) {
-        return
-      }
+    const state = useTestStore.getState()
+    if (!state.isTestActive || !state.sessionId || state.startTime === null || state.stimulusDisplayTime === null || state.oddShapeIndex === null) {
+      return
+    }
 
-      const endTime = performance.now()
-      const reactionTime = endTime - state.stimulusDisplayTime
-      const isCorrect = cellIndex === state.oddShapeIndex
+    const endTime = performance.now()
+    const reactionTime = endTime - state.stimulusDisplayTime
+    const isCorrect = cellIndex === state.oddShapeIndex
 
-      const detailedCoordinate = trackingService.captureDetailedCoordinates(
-        event.nativeEvent as MouseEvent | TouchEvent,
-        cellIndex,
-        gridRows,
-        gridCols,
-        isCorrect,
-        reactionTime,
-      )
+    const detailedCoordinate = trackingService.captureDetailedCoordinates(
+      event.nativeEvent as MouseEvent | TouchEvent,
+      cellIndex,
+      gridRows,
+      gridCols,
+      isCorrect,
+      reactionTime,
+    )
 
-      if (!isCorrect) {
-        state.addWrongTap(detailedCoordinate)
-        if (navigator.vibrate) navigator.vibrate(50)
-        return
-      }
+    if (!isCorrect) {
+      state.addWrongTap(detailedCoordinate)
+      if (navigator.vibrate) navigator.vibrate(50)
+      return
+    }
 
-      trackingService.stopFrameRateMonitoring()
-      const wrongTapsSnapshot = [...state.wrongTaps]
-      const deviceInfo = trackingService.getDeviceInfo()
-      const performanceMetrics = trackingService.getPerformanceMetrics()
+    trackingService.stopFrameRateMonitoring()
+    const wrongTapsSnapshot = [...state.wrongTaps]
+    const deviceInfo = trackingService.getDeviceInfo()
+    const performanceMetrics = trackingService.getPerformanceMetrics()
 
-      const trialData: Omit<Trial, "id" | "createdAt"> = {
-        sessionId: state.sessionId,
-        trialNumber: state.currentTrial + 1,
-        oddShapeIndex: state.oddShapeIndex,
-        startTime: state.startTime,
-        endTime,
-        reactionTime,
-        isCorrect: true,
-        wrongTaps: wrongTapsSnapshot,
-        correctTap: detailedCoordinate,
-        stimulusDisplayTime: state.stimulusDisplayTime,
-        firstTapTime: wrongTapsSnapshot.length > 0 ? wrongTapsSnapshot[0].performanceTimestamp : endTime,
-        frameRate: trackingService.getCurrentFrameRate(),
-        deviceInfo,
-        performanceMetrics,
-      }
+    const trialData: Omit<Trial, "id" | "createdAt"> = {
+      sessionId: state.sessionId,
+      trialNumber: state.currentTrial + 1,
+      oddShapeIndex: state.oddShapeIndex,
+      startTime: state.startTime,
+      endTime,
+      reactionTime,
+      isCorrect: true,
+      wrongTaps: wrongTapsSnapshot,
+      correctTap: detailedCoordinate,
+      stimulusDisplayTime: state.stimulusDisplayTime,
+      firstTapTime: wrongTapsSnapshot.length > 0 ? wrongTapsSnapshot[0].performanceTimestamp : endTime,
+      frameRate: trackingService.getCurrentFrameRate(),
+      deviceInfo,
+      performanceMetrics,
+    }
 
-      pendingTrialsRef.current = [...pendingTrialsRef.current, trialData]
-      state.completeTrial({ reactionTime, wrongTapCount: wrongTapsSnapshot.length, isCorrect: true })
+    pendingTrialsRef.current = [...pendingTrialsRef.current, trialData]
+    state.completeTrial({ reactionTime, wrongTapCount: wrongTapsSnapshot.length, isCorrect: true })
 
-      // Instant Advance Logic
-      const isFinalTrial = state.currentTrial + 1 >= state.totalTrials
+    const isFinalTrial = state.currentTrial + 1 >= state.totalTrials
 
-      if (isFinalTrial) {
-         void finishSession()
-      } else {
-         state.markResultsHidden()
-         state.advanceTrial()
-         startTrial()
-      }
+    if (isFinalTrial) {
+      void finishSession()
+    } else {
+      state.markResultsHidden()
+      state.advanceTrial()
+      startTrial()
+    }
   }, [gridCols, gridRows, finishSession, startTrial])
 
-  // Phase calculation
   const getPhase = () => {
     if (!isReadyToStart) return "idle"
     if (!isTestActive && !showResults && currentTrial === 0) return "idle"
     if (isTestActive) return "test"
-    // We removed 'results' phase logic for auto-advance, but if showResults is somehow true (e.g. final trial?),
-    // it will still show. But we want immediate transition.
-    // For final trial, we call finishSession which redirects.
-    // For intermediate, we set showResults=false immediately.
-    // So 'results' phase shouldn't really happen during test.
     if (showResults) return "results"
     return "idle"
   }
@@ -312,35 +291,34 @@ export default function TestPage() {
 
   return (
     <div className="test-page w-full h-screen bg-background overflow-hidden relative">
-       <CanvasRenderer
-         phase={getPhase()}
-         participantName={participantName}
-         trialInfo={{ current: currentTrial, total: totalTrials }}
-         gridConfig={{ rows: gridRows, cols: gridCols, shape: shape as string, oddShapeIndex }}
-         lastResult={lastTrialResult}
-         onStart={startTrial}
-         onCellClick={handleCellTap}
-         onNextTrial={finishSession} // CanvasRenderer calls this if "Continue" button is clicked (used in results phase)
-         onCanvasReady={handleCanvasReady}
-       />
+      <CanvasRenderer
+        phase={getPhase()}
+        participantName={participantName}
+        trialInfo={{ current: currentTrial, total: totalTrials }}
+        gridConfig={{ rows: gridRows, cols: gridCols, shape: shape as string, oddShapeIndex }}
+        lastResult={lastTrialResult}
+        onStart={startTrial}
+        onCellClick={handleCellTap}
+        onNextTrial={finishSession}
+        onCanvasReady={handleCanvasReady}
+      />
 
-       {/* Status Indicators */}
-       <div className="absolute top-4 right-4 flex flex-col items-end gap-2 pointer-events-none">
-         {isRecording && (
-            <div className="flex items-center gap-2 bg-white/90 px-3 py-1.5 rounded-full shadow-sm border animate-in fade-in slide-in-from-top-2 duration-300">
-               <div className="h-2 w-2 bg-red-500 rounded-full animate-pulse"></div>
-               <Monitor className="h-3 w-3 text-slate-600" />
-               <span className="text-xs font-medium text-slate-600">REC</span>
-            </div>
-         )}
-         {isCameraRecording && (
-            <div className="flex items-center gap-2 bg-white/90 px-3 py-1.5 rounded-full shadow-sm border animate-in fade-in slide-in-from-top-2 duration-300 delay-100">
-               <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
-               <Camera className="h-3 w-3 text-slate-600" />
-               <span className="text-xs font-medium text-slate-600">CAM</span>
-            </div>
-         )}
-       </div>
+      <div className="absolute top-4 right-4 flex flex-col items-end gap-2 pointer-events-none">
+        {isRecording && (
+          <div className="flex items-center gap-2 bg-white/90 px-3 py-1.5 rounded-full shadow-sm border animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="h-2 w-2 bg-red-500 rounded-full animate-pulse"></div>
+            <Monitor className="h-3 w-3 text-slate-600" />
+            <span className="text-xs font-medium text-slate-600">REC</span>
+          </div>
+        )}
+        {isCameraRecording && (
+          <div className="flex items-center gap-2 bg-white/90 px-3 py-1.5 rounded-full shadow-sm border animate-in fade-in slide-in-from-top-2 duration-300 delay-100">
+            <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
+            <Camera className="h-3 w-3 text-slate-600" />
+            <span className="text-xs font-medium text-slate-600">CAM</span>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

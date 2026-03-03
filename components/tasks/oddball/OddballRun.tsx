@@ -68,7 +68,6 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
                 stimulus: '<div style="font-size: 120px; font-weight: 700; color: #fff; font-family: monospace;">✕</div>',
                 choices: "NO_KEYS",
                 trial_duration: config.fixationDuration,
-                trial_duration: config.fixationDuration,
             })
 
             // Sequence of Stimuli

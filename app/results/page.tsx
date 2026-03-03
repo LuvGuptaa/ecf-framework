@@ -5,8 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Home, Download, Share2, Play, Eye, Monitor, Camera, Video } from "lucide-react"
-import type { TestSession, ERPSession } from "@/lib/types"
+import { Home, Download, Share2, Play, Monitor, Camera } from "lucide-react"
+import type { TestSession, ERPSession, Trial, ERPTrialData } from "@/lib/types"
 import { dataService } from "@/lib/data-service"
 import { useToast } from "@/hooks/use-toast"
 
@@ -66,9 +66,7 @@ export default function ResultsPage() {
 
     const loadRecordings = async () => {
       try {
-        console.log("[Results] Loading recordings for session:", sessionId)
         const recordings = await dataService.getLocalRecordings(sessionId)
-        console.log("[Results] Found recordings:", recordings)
         if (!isSubscribed) return
 
         generatedUrls = recordings.map(({ type, blob }) => ({
@@ -76,7 +74,6 @@ export default function ResultsPage() {
           url: URL.createObjectURL(blob),
           blob,
         }))
-        console.log("[Results] Generated URLs:", generatedUrls)
         setLocalRecordings(generatedUrls)
       } catch (error) {
         console.error("Error loading local recordings:", error)
@@ -96,16 +93,16 @@ export default function ResultsPage() {
     const trials = session.trials || []
     if (!trials.length) return null
 
-    const reactionTimes = trials.map((t: any) => t.reactionTime)
+    const reactionTimes = trials.map((t: Trial | ERPTrialData) => (t as { reactionTime?: number }).reactionTime ?? 0)
     let totalWrongTaps = 0
     let correctTrials = 0
 
     if (isERPSession(session)) {
-      correctTrials = trials.filter((t: any) => !t.timedOut).length
+      correctTrials = (trials as ERPTrialData[]).filter((t) => !t.timedOut).length
       totalWrongTaps = trials.length - correctTrials
     } else {
-      totalWrongTaps = trials.reduce((sum: number, t: any) => sum + (t.wrongTaps?.length || 0), 0)
-      correctTrials = trials.filter((t: any) => t.isCorrect).length
+      totalWrongTaps = (trials as Trial[]).reduce((sum, t) => sum + (t.wrongTaps?.length || 0), 0)
+      correctTrials = (trials as Trial[]).filter((t) => t.isCorrect).length
     }
 
     return {
@@ -158,41 +155,6 @@ export default function ResultsPage() {
     })
   }
 
-  const openRecording = (url: string, type: string, source: "cloud" | "local" = "cloud") => {
-    window.open(url, "_blank")
-    toast({
-      title: "Opening Recording",
-      description: `${type} recording opened from ${source}.`,
-    })
-  }
-
-  const downloadRecording = async (url: string, type: string, sessionIdParam: string) => {
-    try {
-      const response = await fetch(url)
-      const blob = await response.blob()
-      const downloadUrl = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = downloadUrl
-      a.download = `${type}-recording-${sessionIdParam}-${Date.now()}.webm`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(downloadUrl)
-
-      toast({
-        title: "Recording Downloaded",
-        description: `${type} recording has been downloaded.`,
-      })
-    } catch (error) {
-      console.error("Error downloading recording:", error)
-      toast({
-        title: "Download Failed",
-        description: "Failed to download the recording.",
-        variant: "destructive",
-      })
-    }
-  }
-
   const downloadLocalRecording = (blob: Blob, type: string, sessionIdParam: string) => {
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -239,7 +201,6 @@ export default function ResultsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
         <div className="container flex h-16 items-center justify-between px-4">
           <div>
@@ -254,8 +215,6 @@ export default function ResultsPage() {
       </header>
 
       <main className="container max-w-5xl mx-auto p-4 py-8 space-y-6">
-
-        {/* Summary Stats */}
         {stats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card>
@@ -288,7 +247,7 @@ export default function ResultsPage() {
             </Card>
           </div>
         )}
-        {/* Recordings */}
+
         {localRecordings.length > 0 && (
           <Card>
             <CardHeader>
@@ -333,7 +292,6 @@ export default function ResultsPage() {
           </Card>
         )}
 
-        {/* Trial Details */}
         <Card>
           <CardHeader>
             <CardTitle>Trial Details</CardTitle>
@@ -341,36 +299,34 @@ export default function ResultsPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {(session.trials || []).map((trial: any, index: number) => (
-                <div key={trial.id} className="border rounded-lg overflow-hidden">
-                  {/* Trial Header */}
+              {(session.trials || []).map((trial: Trial | ERPTrialData) => (
+                <div key={(trial as Trial).id ?? (trial as { trialNumber?: number }).trialNumber} className="border rounded-lg overflow-hidden">
                   <div className="flex items-center justify-between p-3 bg-muted/30">
                     <div className="flex items-center gap-3">
-                      <Badge variant="outline">Trial {trial.trialNumber}</Badge>
-                      <span className="font-medium text-green-600">{trial.reactionTime.toFixed(0)}ms</span>
-                      {trial.frameRate && <span className="text-xs text-muted-foreground">{trial.frameRate}fps</span>}
+                      <Badge variant="outline">Trial {(trial as Trial).trialNumber}</Badge>
+                      <span className="font-medium text-green-600">{((trial as { reactionTime?: number }).reactionTime ?? 0).toFixed(0)}ms</span>
+                      {(trial as Trial).frameRate && <span className="text-xs text-muted-foreground">{(trial as Trial).frameRate}fps</span>}
                     </div>
                     <div className="flex items-center gap-2">
                       {!isERPSession(session) ? (
                         <>
-                          {trial.wrongTaps?.length > 0 && <Badge variant="destructive">{trial.wrongTaps.length} wrong</Badge>}
-                          <Badge variant={trial.wrongTaps?.length === 0 ? "default" : "secondary"}>
-                            {trial.wrongTaps?.length === 0 ? "Perfect" : "Completed"}
+                          {(trial as Trial).wrongTaps?.length > 0 && <Badge variant="destructive">{(trial as Trial).wrongTaps.length} wrong</Badge>}
+                          <Badge variant={(trial as Trial).wrongTaps?.length === 0 ? "default" : "secondary"}>
+                            {(trial as Trial).wrongTaps?.length === 0 ? "Perfect" : "Completed"}
                           </Badge>
                         </>
                       ) : (
-                        <Badge variant={trial.timedOut ? "destructive" : "default"}>
-                          {trial.timedOut ? "Timeout" : "Completed"}
+                        <Badge variant={(trial as ERPTrialData).timedOut ? "destructive" : "default"}>
+                          {(trial as ERPTrialData).timedOut ? "Timeout" : "Completed"}
                         </Badge>
                       )}
                     </div>
                   </div>
 
-                  {/* Tap Details */}
-                  {!isERPSession(session) && trial.wrongTaps?.length > 0 && (
+                  {!isERPSession(session) && (trial as Trial).wrongTaps?.length > 0 && (
                     <div className="p-3 space-y-2 bg-background">
                       <p className="text-xs font-medium text-muted-foreground mb-2">Tap Sequence:</p>
-                      {trial.wrongTaps.map((tap, tapIndex) => (
+                      {(trial as Trial).wrongTaps.map((tap, tapIndex) => (
                         <div key={tapIndex} className="flex items-center justify-between text-sm py-1.5 px-2 rounded bg-destructive/5 border border-destructive/20">
                           <div className="flex items-center gap-2">
                             <Badge variant="outline" className="text-xs border-destructive/40 text-destructive">
@@ -383,17 +339,17 @@ export default function ResultsPage() {
                           <span className="font-medium text-destructive">{tap.reactionTime.toFixed(0)}ms</span>
                         </div>
                       ))}
-                      {trial.correctTap && (
+                      {(trial as Trial).correctTap && (
                         <div className="flex items-center justify-between text-sm py-1.5 px-2 rounded bg-green-50 border border-green-200">
                           <div className="flex items-center gap-2">
                             <Badge variant="outline" className="text-xs border-green-600/40 text-green-600">
                               Correct
                             </Badge>
                             <span className="text-muted-foreground text-xs">
-                              Cell {trial.correctTap.cellIndex} (Row {trial.correctTap.gridPosition.row + 1}, Col {trial.correctTap.gridPosition.col + 1})
+                              Cell {(trial as Trial).correctTap!.cellIndex} (Row {(trial as Trial).correctTap!.gridPosition.row + 1}, Col {(trial as Trial).correctTap!.gridPosition.col + 1})
                             </span>
                           </div>
-                          <span className="font-medium text-green-600">{trial.reactionTime.toFixed(0)}ms</span>
+                          <span className="font-medium text-green-600">{((trial as { reactionTime?: number }).reactionTime ?? 0).toFixed(0)}ms</span>
                         </div>
                       )}
                     </div>
@@ -404,7 +360,6 @@ export default function ResultsPage() {
           </CardContent>
         </Card>
 
-        {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-3">
           <Button onClick={() => router.push("/")} className="flex-1" size="lg">
             <Home className="h-4 w-4 mr-2" />

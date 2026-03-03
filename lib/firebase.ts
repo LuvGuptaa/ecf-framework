@@ -28,7 +28,7 @@ const shouldUseEmulator =
 if (shouldUseEmulator) {
   try {
     connectFirestoreEmulator(db, "localhost", 8080)
-  } catch (error) {
+  } catch {
     console.log("Firestore emulator already connected")
   }
 }

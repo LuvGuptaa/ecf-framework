@@ -16,25 +16,18 @@ const PATCH_CHARS: Record<string, string> = {
     normal: "#",
 }
 
-// ~37.8px per cm on a standard 96dpi screen
-const PX_PER_CM = 37.8
-
 export function ERPDisplay({
     patches,
     gridSize,
     boldTargets = false,
     fullScreen = false,
-    patchSizeCm = 0.7,
 }: ERPDisplayProps) {
-    // In full-screen mode: use viewport height as the square side length
-    // Each cell = viewportHeight / gridSize
-    // In non-fullscreen: use the legacy fixed sizing
     const cellSizeCss = fullScreen
         ? `calc(100vh / ${gridSize})`
         : `${Math.min(Math.floor(70 / gridSize) * 10, 80)}px`
 
     const patchSizePx = fullScreen
-        ? Math.floor(window.innerHeight / gridSize)
+        ? (typeof window !== "undefined" ? Math.floor(window.innerHeight / gridSize) : 40)
         : Math.min(Math.floor(70 / gridSize) * 10, 80)
 
     const fontSize = fullScreen
@@ -65,7 +58,7 @@ export function ERPDisplay({
                 borderRadius: fullScreen ? "0" : "4px",
                 ...(fullScreen
                     ? {
-                        width: "100vh",   /* square: width = height */
+                        width: "100vh",
                         height: "100vh",
                         margin: "0 auto",
                     }
@@ -101,7 +94,6 @@ export function ERPDisplay({
                 const weight = isBold ? 900 : 700
 
                 if (fullScreen) {
-                    // Simplified single-letter display for full-screen mode
                     return (
                         <div
                             key={i}
@@ -125,7 +117,6 @@ export function ERPDisplay({
                     )
                 }
 
-                // Legacy 3x3 hash pattern for non-fullscreen
                 return (
                     <div
                         key={i}

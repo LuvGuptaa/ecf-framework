@@ -30,7 +30,7 @@ export function ReactionConfig({ onConfigComplete }: ReactionConfigProps) {
     // Start with default valid check
     // Actually, validation usually happens before 'Start'
 
-    const handleConfigChange = (field: keyof TestConfig, value: any) => {
+    const handleConfigChange = (field: keyof TestConfig, value: string | number) => {
         setTestConfig((prev) => ({
             ...prev,
             [field]: value,

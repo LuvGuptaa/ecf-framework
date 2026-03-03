@@ -38,17 +38,7 @@ const shapeIcons = {
 type ShapeKey = keyof typeof shapeIcons
 
 export function CanvasRenderer(props: CanvasRendererProps) {
-  const {
-    phase,
-    participantName,
-    trialInfo,
-    gridConfig,
-    lastResult,
-    onStart,
-    onCellClick,
-    onNextTrial,
-    onCanvasReady,
-  } = props
+  const { onCanvasReady } = props
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [images, setImages] = useState<Record<string, HTMLImageElement>>({})
@@ -118,7 +108,7 @@ export function CanvasRenderer(props: CanvasRendererProps) {
     handleResize()
 
     return () => window.removeEventListener("resize", handleResize)
-  }, []) // Run once on mount
+  }, [onCanvasReady])
 
   // Helper for rounded rects
   const drawRoundRectPath = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
@@ -139,14 +129,14 @@ export function CanvasRenderer(props: CanvasRendererProps) {
   const render = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas || dimensions.width === 0) {
-       rafRef.current = requestAnimationFrame(render)
-       return
+      rafRef.current = requestAnimationFrame(render)
+      return
     }
 
     const ctx = canvas.getContext("2d")
     if (!ctx) {
-       rafRef.current = requestAnimationFrame(render)
-       return
+      rafRef.current = requestAnimationFrame(render)
+      return
     }
 
     const dpr = window.devicePixelRatio || 1
@@ -257,7 +247,7 @@ export function CanvasRenderer(props: CanvasRendererProps) {
           ctx.fillStyle = isOdd ? "#fff7ed" : "#eff6ff"
 
           const gap = 4
-          drawRoundRectPath(ctx, x + gap, y + gap, size - gap*2, size - gap*2, 8)
+          drawRoundRectPath(ctx, x + gap, y + gap, size - gap * 2, size - gap * 2, 8)
           ctx.fill()
           ctx.stroke()
 
@@ -328,22 +318,22 @@ export function CanvasRenderer(props: CanvasRendererProps) {
     tapsRef.current = tapsRef.current.filter(t => now - t.startTime < 600)
 
     tapsRef.current.forEach(tap => {
-       const age = now - tap.startTime
-       const progress = age / 600 // 0 to 1
+      const age = now - tap.startTime
+      const progress = age / 600 // 0 to 1
 
-       // Ease out
-       const ease = 1 - Math.pow(1 - progress, 3)
+      // Ease out
+      const ease = 1 - Math.pow(1 - progress, 3)
 
-       const radius = 10 + (ease * 40)
-       const alpha = 1 - progress
+      const radius = 10 + (ease * 40)
+      const alpha = 1 - progress
 
-       ctx.beginPath()
-       ctx.arc(tap.x, tap.y, radius, 0, Math.PI * 2)
-       ctx.fillStyle = `rgba(59, 130, 246, ${alpha * 0.3})`
-       ctx.fill()
-       ctx.strokeStyle = `rgba(59, 130, 246, ${alpha * 0.8})`
-       ctx.lineWidth = 2
-       ctx.stroke()
+      ctx.beginPath()
+      ctx.arc(tap.x, tap.y, radius, 0, Math.PI * 2)
+      ctx.fillStyle = `rgba(59, 130, 246, ${alpha * 0.3})`
+      ctx.fill()
+      ctx.strokeStyle = `rgba(59, 130, 246, ${alpha * 0.8})`
+      ctx.lineWidth = 2
+      ctx.stroke()
     })
 
     rafRef.current = requestAnimationFrame(render)
@@ -366,11 +356,11 @@ export function CanvasRenderer(props: CanvasRendererProps) {
 
     let clientX, clientY
     if ('touches' in e) {
-       clientX = e.touches[0].clientX
-       clientY = e.touches[0].clientY
+      clientX = e.touches[0].clientX
+      clientY = e.touches[0].clientY
     } else {
-       clientX = (e as React.MouseEvent).clientX
-       clientY = (e as React.MouseEvent).clientY
+      clientX = (e as React.MouseEvent).clientX
+      clientY = (e as React.MouseEvent).clientY
     }
 
     const x = (clientX - rect.left)
@@ -415,9 +405,7 @@ export function CanvasRenderer(props: CanvasRendererProps) {
       }
 
     } else if (phase === "results") {
-      const cardW = Math.min(400, dimensions.width - 40)
       const cardH = 300
-      const cardX = (dimensions.width - cardW) / 2
       const cardY = 80 + (contentHeight - cardH) / 2
       const btnW = 200
       const btnH = 50

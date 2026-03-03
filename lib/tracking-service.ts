@@ -1,5 +1,4 @@
 // Advanced tracking service for precise coordinate and timing measurement
-import type { DetailedTapCoordinate } from "./types"
 
 export interface TimingMeasurement {
   trialStartTime: number
@@ -41,7 +40,7 @@ export class TrackingService {
       screenY = touch.screenY
       pageX = touch.pageX
       pageY = touch.pageY
-      pressure = (touch as any).force || 0
+      pressure = (touch as Touch & { force?: number }).force || 0
       pointerType = "touch"
     } else {
       const mouseEvent = event as MouseEvent
@@ -51,7 +50,7 @@ export class TrackingService {
       screenY = mouseEvent.screenY
       pageX = mouseEvent.pageX
       pageY = mouseEvent.pageY
-      pressure = (mouseEvent as any).pressure || 0
+      pressure = (mouseEvent as MouseEvent & { pressure?: number }).pressure || 0
     }
 
     // Calculate element-relative coordinates
@@ -210,7 +209,7 @@ export class TrackingService {
   }
 
   private getMemoryUsage() {
-    const memory = (performance as any).memory
+    const memory = (performance as Performance & { memory?: { usedJSHeapSize: number; totalJSHeapSize: number; jsHeapSizeLimit: number } }).memory
     if (memory) {
       return {
         usedJSHeapSize: memory.usedJSHeapSize,

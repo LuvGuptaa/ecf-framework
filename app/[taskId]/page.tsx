@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { getTask } from "@/lib/tasks/registry"
 import { useTestStore } from "@/lib/stores/test-store"
 import { Button } from "@/components/ui/button"
@@ -9,7 +9,6 @@ import { ArrowLeft } from "lucide-react"
 
 export default function TaskConfigPage({ params }: { params: { taskId: string } }) {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { taskId } = params
 
   const task = getTask(taskId)
@@ -23,8 +22,8 @@ export default function TaskConfigPage({ params }: { params: { taskId: string } 
 
   if (!task) return null
 
-  const handleComplete = (data?: Record<string, unknown>) => {
-    store.setConfig(data)
+  const handleComplete = (data: Record<string, unknown>) => {
+    store.setConfig(data as unknown as import("@/lib/types").TestConfig)
     router.push(`/${taskId}/run`)
   }
 
