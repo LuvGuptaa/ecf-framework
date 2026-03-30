@@ -13,48 +13,46 @@ import type { TopDownConfig, PatchItem } from "@/lib/types"
 import htmlKeyboardResponse from "@jspsych/plugin-html-keyboard-response"
 import callFunctionPlugin from "@jspsych/plugin-call-function"
 
+const TARGETS_PER_SLIDE = 2
+
 interface TopDownRunProps {
     config: TopDownConfig
     participant: { id: string; name: string; age: number; email?: string; notes?: string }
     onComplete: () => void
 }
 
-const BOTTOM_UP_LETTERS = "ABCDFGHIJKLMNOPQRSTUVWXYZ".split("")
-
-function getRandomBottomUpLetter(): string {
-    return BOTTOM_UP_LETTERS[Math.floor(Math.random() * BOTTOM_UP_LETTERS.length)]
-}
-
-function generatePatches(config: TopDownConfig, isBottomUpTrial: boolean): PatchItem[] {
+function generatePatches(config: TopDownConfig): PatchItem[] {
     const totalCells = config.gridSize * config.gridSize
     const patches: PatchItem[] = []
 
     const fillCount = Math.round((config.fillPercentage / 100) * totalCells)
     const allIndices = Array.from({ length: totalCells }, (_, i) => i)
 
+    // Shuffle indices
     for (let i = allIndices.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1))
             ;[allIndices[i], allIndices[j]] = [allIndices[j], allIndices[i]]
     }
-    const filledIndices = new Set(allIndices.slice(0, fillCount))
+    const filledIndices = allIndices.slice(0, fillCount)
 
-    for (let i = 0; i < totalCells; i++) {
-        const row = Math.floor(i / config.gridSize)
-        const col = i % config.gridSize
+    // Place exactly targetsPerSlide targets, rest are distractors
+    const targetCount = Math.min(TARGETS_PER_SLIDE, filledIndices.length)
 
-        if (!filledIndices.has(i)) continue
+    filledIndices.forEach((cellIndex, idx) => {
+        const row = Math.floor(cellIndex / config.gridSize)
+        const col = cellIndex % config.gridSize
 
-        const rand = Math.random() * 100
-
-        if (isBottomUpTrial && rand < config.bottomUpTargetProbability) {
-            patches.push({ type: "bottomUpTarget", row, col, letter: getRandomBottomUpLetter(), color: "#ff0000" })
-        } else if (rand < config.bottomUpTargetProbability + config.targetProbability) {
+        if (idx < targetCount) {
             patches.push({ type: "target", row, col })
-        } else if (rand < config.bottomUpTargetProbability + config.targetProbability + config.distractorProbability) {
-            patches.push({ type: "distractor", row, col })
         } else {
             patches.push({ type: "distractor", row, col })
         }
+    })
+
+    // Shuffle patches so targets aren't always first in grid
+    for (let i = patches.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+            ;[patches[i], patches[j]] = [patches[j], patches[i]]
     }
 
     return patches
@@ -92,19 +90,24 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
         })
 
         for (let i = 0; i < config.numberOfTrials; i++) {
-            const isBottomUp = Math.random() * 100 < config.bottomUpProbability
-            const patches = generatePatches(config, isBottomUp)
+            const patches = generatePatches(config)
             const trialHtml = renderToString(
-                <ERPDisplay patches={patches} gridSize={config.gridSize} fullScreen patchSizeCm={config.patchSizeCm} />
+                <ERPDisplay patches={patches} gridSize={config.gridSize} fullScreen patchSizeCm={config.patchSizeCm} showHashes={true} />
             )
 
+            // Fixation cross before each trial
             newTimeline.push({
                 type: htmlKeyboardResponse,
-                stimulus: '<div style="width: 100vw; height: 100vh; background: black; display: flex; align-items: center; justify-content: center;"><div style="width: 48px; height: 48px; border: 4px solid rgba(255,255,255,0.2); border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite;"></div></div>',
+                stimulus: '<div style="width: 100vw; height: 100vh; background: black; display: flex; align-items: center; justify-content: center;"><div style="font-size: 80px; font-weight: 700; color: #fff; font-family: monospace;">+</div></div>',
                 choices: "NO_KEYS",
-                trial_duration: config.interTrialInterval,
+                trial_duration: config.fixationDuration,
+                data: {
+                    task: 'top-down-fixation',
+                    trial_index: i,
+                },
             })
 
+            // Stimulus grid
             newTimeline.push({
                 type: htmlKeyboardResponse,
                 stimulus: trialHtml,
@@ -113,8 +116,16 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
                 data: {
                     task: 'top-down-trial',
                     trial_index: i,
-                    isBottomUp,
+                    targetCount: TARGETS_PER_SLIDE,
                 },
+            })
+
+            // Inter-Trial Interval
+            newTimeline.push({
+                type: htmlKeyboardResponse,
+                stimulus: '<div style="width: 100vw; height: 100vh; background: black; display: flex; align-items: center; justify-content: center;"><div style="width: 48px; height: 48px; border: 4px solid rgba(255,255,255,0.2); border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite;"></div></div>',
+                choices: "NO_KEYS",
+                trial_duration: config.interTrialInterval,
             })
         }
 
@@ -142,12 +153,10 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
         <div className="w-full h-screen bg-black text-white overflow-hidden">
             {phase === "idle" && (
                 <div className="flex flex-col items-center justify-center h-full space-y-8">
-                    <h2 className="text-3xl font-bold">Top Down Search</h2>
-                    <p className="text-gray-300 text-lg">Find targets (E) among distractors (Ǝ) in the grid</p>
-                    {config.bottomUpProbability > 0 && (
-                        <p className="text-red-400 text-sm">Some trials include <strong>red letter</strong> bottom-up targets</p>
-                    )}
-                    <p className="text-gray-400">Press <kbd className="px-2 py-1 bg-gray-700 rounded font-mono">Space</kbd> once after finding the target</p>
+                    <h2 className="text-3xl font-bold">Top Down Conjunction Search</h2>
+                    <p className="text-gray-300 text-lg">Find targets (<span className="font-mono">E</span>) among distractors (<span className="font-mono">Ǝ</span>) in the grid</p>
+                    <p className="text-gray-400">Each slide has exactly {TARGETS_PER_SLIDE} targets, and both targets and distractors are shown as # patches</p>
+                    <p className="text-gray-400">Press <kbd className="px-2 py-1 bg-gray-700 rounded font-mono">Space</kbd> once after finding the targets</p>
                     <button
                         onClick={startTask}
                         className="px-8 py-4 bg-white text-black rounded-lg text-xl font-semibold hover:bg-gray-200 transition-colors"

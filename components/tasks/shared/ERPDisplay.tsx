@@ -8,6 +8,7 @@ interface ERPDisplayProps {
     boldTargets?: boolean
     fullScreen?: boolean
     patchSizeCm?: number
+    showHashes?: boolean
 }
 
 const PATCH_CHARS: Record<string, string> = {
@@ -21,17 +22,19 @@ export function ERPDisplay({
     gridSize,
     boldTargets = false,
     fullScreen = false,
+    showHashes = true,
 }: ERPDisplayProps) {
     const cellSizeCss = fullScreen
-        ? `calc(100vh / ${gridSize})`
+        ? "1fr"
         : `${Math.min(Math.floor(70 / gridSize) * 10, 80)}px`
 
+    const viewportMin = typeof window !== "undefined" ? Math.min(window.innerWidth, window.innerHeight) : 800
     const patchSizePx = fullScreen
-        ? (typeof window !== "undefined" ? Math.floor(window.innerHeight / gridSize) : 40)
+        ? Math.max(Math.floor(viewportMin / gridSize), 12)
         : Math.min(Math.floor(70 / gridSize) * 10, 80)
 
     const fontSize = fullScreen
-        ? Math.max(Math.round(patchSizePx * 0.6), 8)
+        ? Math.max(Math.round(patchSizePx * (showHashes ? 0.22 : 0.58)), 8)
         : Math.max(Math.floor(patchSizePx * 0.28), 10)
 
     const grid: (PatchItem | null)[][] = Array.from({ length: gridSize }, () =>
@@ -58,7 +61,7 @@ export function ERPDisplay({
                 borderRadius: fullScreen ? "0" : "4px",
                 ...(fullScreen
                     ? {
-                        width: "100vh",
+                        width: "100vw",
                         height: "100vh",
                         margin: "0 auto",
                     }
@@ -74,8 +77,8 @@ export function ERPDisplay({
                         <div
                             key={i}
                             style={{
-                                width: patchSizePx,
-                                height: patchSizePx,
+                                width: fullScreen ? "100%" : patchSizePx,
+                                height: fullScreen ? "100%" : patchSizePx,
                                 background: "#000",
                             }}
                         />
@@ -86,20 +89,18 @@ export function ERPDisplay({
                 const centerChar = isBottomUp
                     ? (patch.letter ?? "X")
                     : (PATCH_CHARS[patch.type] ?? "#")
-                const textColor = isBottomUp
-                    ? (patch.color ?? "#ff0000")
-                    : "#fff"
+                const textColor = patch.color ?? (isBottomUp ? "#ff0000" : "#fff")
 
                 const isBold = boldTargets && patch.type === "target"
                 const weight = isBold ? 900 : 700
 
-                if (fullScreen) {
+                if (!showHashes) {
                     return (
                         <div
                             key={i}
                             style={{
-                                width: patchSizePx,
-                                height: patchSizePx,
+                                width: fullScreen ? "100%" : patchSizePx,
+                                height: fullScreen ? "100%" : patchSizePx,
                                 background: "#000",
                                 display: "flex",
                                 alignItems: "center",
@@ -121,8 +122,8 @@ export function ERPDisplay({
                     <div
                         key={i}
                         style={{
-                            width: patchSizePx,
-                            height: patchSizePx,
+                            width: fullScreen ? "100%" : patchSizePx,
+                            height: fullScreen ? "100%" : patchSizePx,
                             background: "#000",
                             display: "flex",
                             alignItems: "center",
@@ -153,11 +154,14 @@ export function ERPDisplay({
 interface SinglePatchDisplayProps {
     type: PatchType
     size?: number
+    color?: string
+    showHashes?: boolean
 }
 
-export function SinglePatchDisplay({ type, size = 120 }: SinglePatchDisplayProps) {
+export function SinglePatchDisplay({ type, size = 120, color, showHashes = true }: SinglePatchDisplayProps) {
     const centerChar = PATCH_CHARS[type] ?? "#"
-    const fontSize = Math.floor(size * 0.22)
+    const textColor = color ?? "#fff"
+    const fontSize = showHashes ? Math.floor(size * 0.22) : Math.floor(size * 0.5)
 
     return (
         <div
@@ -171,18 +175,22 @@ export function SinglePatchDisplay({ type, size = 120 }: SinglePatchDisplayProps
                 fontFamily: "'Courier New', Courier, monospace",
                 fontSize: `${fontSize}px`,
                 lineHeight: 1.2,
-                color: "#fff",
+                color: textColor,
                 whiteSpace: "pre",
                 fontWeight: 700,
                 userSelect: "none",
                 borderRadius: "4px",
             }}
         >
-            <div style={{ textAlign: "center" }}>
-                <div>###</div>
-                <div>#{centerChar}#</div>
-                <div>###</div>
-            </div>
+            {showHashes ? (
+                <div style={{ textAlign: "center" }}>
+                    <div>###</div>
+                    <div>#{centerChar}#</div>
+                    <div>###</div>
+                </div>
+            ) : (
+                centerChar
+            )}
         </div>
     )
 }

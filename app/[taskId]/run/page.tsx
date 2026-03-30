@@ -6,8 +6,7 @@ import { getTask, tasks } from "@/lib/tasks/registry"
 import { useTestStore } from "@/lib/stores/test-store"
 import { useERPStore } from "@/lib/stores/erp-store"
 import { CalibrationScreen } from "@/components/tasks/shared/CalibrationScreen"
-import { RecordingService } from "@/lib/recording-service"
-import { localDB } from "@/lib/local-db"
+import { RecordingService, downloadRecordingsLocally } from "@/lib/recording-service"
 import { Camera, Video } from "lucide-react"
 
 type RunPhase = "permission" | "pre-calibration" | "task" | "post-calibration" | "done"
@@ -74,17 +73,9 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
   const handlePostCalibrationComplete = useCallback(async () => {
     if (cameraRecordingServiceRef.current) {
       const blob = await cameraRecordingServiceRef.current.stopRecording()
-      const erpSessionId = useERPStore.getState().sessionId
-      const testSessionId = useTestStore.getState().sessionId
-      const sid = erpSessionId || testSessionId
-      if (blob && sid) {
-        await localDB.saveRecording({
-          id: `${sid}-camera`,
-          sessionId: sid,
-          type: "camera",
-          blob,
-          createdAt: new Date(),
-        })
+      const name = participant?.name || "participant"
+      if (blob) {
+        await downloadRecordingsLocally(name, { camera: blob })
       }
     }
 
@@ -93,7 +84,7 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
     const testSessionId = useTestStore.getState().sessionId
     const sid = erpSessionId || testSessionId
     router.push(`/results?sessionId=${sid}`)
-  }, [router])
+  }, [router, participant])
 
   if (!task || !participant) return null
 

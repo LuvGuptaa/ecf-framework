@@ -319,3 +319,33 @@ export const downloadBlob = (blob: Blob, filename: string): void => {
 export const createVideoPreview = (blob: Blob): string => {
   return URL.createObjectURL(blob)
 }
+
+const formatRecordingFileBase = (participantName: string): string => {
+  const safeName = participantName
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+  const normalizedName = safeName.length > 0 ? safeName : "participant"
+
+  const now = new Date()
+  const pad = (n: number) => n.toString().padStart(2, "0")
+  const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+
+  return `${normalizedName}_${timestamp}`
+}
+
+// Download screen and/or camera recordings as separate local files.
+export const downloadRecordingsLocally = async (
+  participantName: string,
+  recordings: { screen?: Blob | null; camera?: Blob | null },
+): Promise<void> => {
+  const fileBase = formatRecordingFileBase(participantName)
+
+  if (recordings.screen) {
+    downloadBlob(recordings.screen, `${fileBase}_screen.webm`)
+  }
+
+  if (recordings.camera) {
+    downloadBlob(recordings.camera, `${fileBase}_camera.webm`)
+  }
+}

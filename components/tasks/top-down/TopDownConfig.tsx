@@ -21,8 +21,7 @@ export function TopDownConfigComponent({ onConfigComplete }: TopDownConfigProps)
         slideDuration: 500,
         fillPercentage: 25,
         patchSizeCm: 0.7,
-        bottomUpProbability: 30,
-        bottomUpTargetProbability: 10,
+        targetsPerSlide: 2,
         fixationDuration: 1000,
         interTrialInterval: 1250,
         stimulusDuration: 4000,
@@ -36,45 +35,20 @@ export function TopDownConfigComponent({ onConfigComplete }: TopDownConfigProps)
     }
 
     const handleSubmit = () => {
-        if (config.targetProbability + config.distractorProbability > 100) return
-        onConfigComplete(config)
+        onConfigComplete({
+            ...config,
+            targetsPerSlide: 2,
+        })
     }
 
     return (
         <div className="space-y-6">
             <Card className="border-2">
                 <CardHeader className="space-y-1">
-                    <CardTitle className="text-xl">Top Down Search Configuration</CardTitle>
-                    <CardDescription>Configure stimulus probabilities, grid, and bottom-up integration</CardDescription>
+                    <CardTitle className="text-xl">Top Down Conjunction Search Configuration</CardTitle>
+                    <CardDescription>Configure grid, fill, and timing for top-down search with hash-surrounded patches</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                    {/* Probabilities */}
-                    <div>
-                        <h4 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Probabilities</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label>Target (E) Probability (%)</Label>
-                                <Input
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    value={config.targetProbability}
-                                    onChange={(e) => handleChange("targetProbability", e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Distractor (Ǝ) Probability (%)</Label>
-                                <Input
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    value={config.distractorProbability}
-                                    onChange={(e) => handleChange("distractorProbability", e.target.value)}
-                                />
-                            </div>
-                        </div>
-                    </div>
-
                     {/* Grid & Display */}
                     <div>
                         <h4 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Grid &amp; Display</h4>
@@ -113,6 +87,22 @@ export function TopDownConfigComponent({ onConfigComplete }: TopDownConfigProps)
                         </div>
                     </div>
 
+                    {/* Targets */}
+                    <div>
+                        <h4 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Targets</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+                            <div className="space-y-2">
+                                <Label>Targets per Slide</Label>
+                                <Input
+                                    type="number"
+                                    value={2}
+                                    disabled
+                                />
+                                <p className="text-xs text-muted-foreground">Fixed at exactly 2 E targets per slide (rest are Ǝ distractors)</p>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Timing */}
                     <div>
                         <h4 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Timing</h4>
@@ -138,20 +128,7 @@ export function TopDownConfigComponent({ onConfigComplete }: TopDownConfigProps)
                                     onChange={(e) => handleChange("maxTrialTime", e.target.value)}
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label>Slide Duration (ms)</Label>
-                                <Input
-                                    type="number"
-                                    min="100"
-                                    max="10000"
-                                    step="100"
-                                    value={config.slideDuration}
-                                    onChange={(e) => handleChange("slideDuration", e.target.value)}
-                                />
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                            <div className="space-y-2">
+                            {/* <div className="space-y-2">
                                 <Label>Fixation Duration (ms)</Label>
                                 <Input
                                     type="number"
@@ -161,7 +138,9 @@ export function TopDownConfigComponent({ onConfigComplete }: TopDownConfigProps)
                                     value={config.fixationDuration}
                                     onChange={(e) => handleChange("fixationDuration", e.target.value)}
                                 />
-                            </div>
+                            </div> */}
+                        </div>
+                        {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                             <div className="space-y-2">
                                 <Label>Inter-Trial Interval (ms)</Label>
                                 <Input
@@ -184,37 +163,7 @@ export function TopDownConfigComponent({ onConfigComplete }: TopDownConfigProps)
                                     onChange={(e) => handleChange("stimulusDuration", e.target.value)}
                                 />
                             </div>
-                        </div>
-                    </div>
-
-                    {/* Bottom-Up Integration */}
-                    <div>
-                        <h4 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Bottom-Up Integration</h4>
-                        <p className="text-xs text-muted-foreground mb-3">
-                            Bottom-up trials include an additional red-letter target. Set probability to 0 for pure top-down.
-                        </p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label>Bottom-Up Trial Probability (%)</Label>
-                                <Input
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    value={config.bottomUpProbability}
-                                    onChange={(e) => handleChange("bottomUpProbability", e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Bottom-Up Target Probability (%)</Label>
-                                <Input
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    value={config.bottomUpTargetProbability}
-                                    onChange={(e) => handleChange("bottomUpTargetProbability", e.target.value)}
-                                />
-                            </div>
-                        </div>
+                        </div> */}
                     </div>
 
                     {/* Summary */}
@@ -241,16 +190,16 @@ export function TopDownConfigComponent({ onConfigComplete }: TopDownConfigProps)
                                 <p className="font-medium">{config.numberOfTrials}</p>
                             </div>
                             <div>
-                                <p className="text-muted-foreground">Targets</p>
-                                <p className="font-medium">{config.targetProbability}%</p>
+                                <p className="text-muted-foreground">Targets/Slide</p>
+                                <p className="font-medium">2</p>
                             </div>
                             <div>
-                                <p className="text-muted-foreground">Distractors</p>
-                                <p className="font-medium">{config.distractorProbability}%</p>
+                                <p className="text-muted-foreground">Fixation</p>
+                                <p className="font-medium">{config.fixationDuration}ms</p>
                             </div>
                             <div>
-                                <p className="text-muted-foreground">Bottom-Up</p>
-                                <p className="font-medium">{config.bottomUpProbability}%</p>
+                                <p className="text-muted-foreground">ITI</p>
+                                <p className="font-medium">{config.interTrialInterval}ms</p>
                             </div>
                             <div>
                                 <p className="text-muted-foreground">Max Time</p>
@@ -259,13 +208,8 @@ export function TopDownConfigComponent({ onConfigComplete }: TopDownConfigProps)
                         </div>
                     </div>
 
-                    {config.targetProbability + config.distractorProbability > 100 && (
-                        <p className="text-destructive text-sm">Target + Distractor probability cannot exceed 100%</p>
-                    )}
-
                     <Button
                         onClick={handleSubmit}
-                        disabled={config.targetProbability + config.distractorProbability > 100}
                         className="w-full h-14 text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
                         size="lg"
                     >

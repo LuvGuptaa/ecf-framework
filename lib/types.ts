@@ -118,8 +118,7 @@ export interface TopDownConfig {
   slideDuration: number
   fillPercentage: number
   patchSizeCm: number
-  bottomUpProbability: number
-  bottomUpTargetProbability: number
+  targetsPerSlide: number
   fixationDuration: number
   interTrialInterval: number
   stimulusDuration: number
@@ -128,24 +127,23 @@ export interface TopDownConfig {
 export interface OddballConfig {
   targetProbability: number
   distractorProbability: number
-  stimuliPerTrial: number
   numberOfTrials: number
+  stimuliPerTrial: number
   maxTrialTime: number
   fixationDuration: number
   stimulusDuration: number
   interTrialInterval: number
+  targetsToDetect: number
 }
 
-/** @deprecated Bottom-up is now integrated into TopDownConfig via bottomUpProbability */
 export interface BottomUpConfig {
-  targetProbability: number
-  distractorProbability: number
+  targetColor: string
   gridSize: number
   numberOfTrials: number
   maxTrialTime: number
-  slideDuration: number
   fixationDuration: number
   interTrialInterval: number
+  stimulusDuration: number
 }
 
 export type ERPTaskType = "top-down" | "visual-oddball" | "bottom-up"

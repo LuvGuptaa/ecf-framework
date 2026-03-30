@@ -8,8 +8,7 @@ import type { Trial, TestConfig, Participant } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import { trackingService } from "@/lib/tracking-service"
 import { useTestStore } from "@/lib/stores/test-store"
-import { RecordingService } from "@/lib/recording-service"
-import { localDB } from "@/lib/local-db"
+import { RecordingService, downloadRecordingsLocally } from "@/lib/recording-service"
 import { CanvasRenderer } from "@/components/canvas-renderer"
 import { Monitor } from "lucide-react"
 
@@ -137,27 +136,10 @@ export function ReactionRun({ config, participant, onComplete }: ReactionRunProp
         if (!sessionId) return
 
         try {
-            // Stop Recordings
-            const promises = []
-
-            if (recordingServiceRef.current) {
-                promises.push(
-                    recordingServiceRef.current.stopRecording().then(blob => {
-                        if (blob) {
-                            return localDB.saveRecording({
-                                id: `${sessionId}-screen`,
-                                sessionId,
-                                type: "screen",
-                                blob,
-                                createdAt: new Date()
-                            })
-                        }
-                    })
-                )
-            }
-
-            await Promise.all(promises)
-            console.log("[Test] Recordings saved.")
+            // Stop Recordings & download as zip
+            const screenBlob = await (recordingServiceRef.current?.stopRecording() ?? Promise.resolve(null))
+            await downloadRecordingsLocally(participant.name || "participant", { screen: screenBlob })
+            console.log("[Test] Recordings downloaded.")
 
             const trialsToPersist = pendingTrialsRef.current
             if (trialsToPersist.length > 0) {

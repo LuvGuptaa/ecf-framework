@@ -28,14 +28,14 @@ export const tasks: Record<string, TaskDefinition> = {
     "top-down-search": {
         id: "top-down-search",
         title: "Top Down Search",
-        description: "Find targets (E) and distractors (Ǝ) in a full-screen grid. Some trials include red-letter bottom-up targets. Press Space once after finding the second target.",
+        description: "Find targets (E) and distractors (Ǝ) in a full-screen grid with hash patches. Each slide has exactly 2 targets. Press Space once after finding them.",
         ConfigComponent: TopDownConfigComponent,
         RunComponent: TopDownRun,
     },
     "visual-oddball": {
         id: "visual-oddball",
         title: "Visual Oddball",
-        description: "Observe sequential stimuli at a fixation cross. Targets and distractors appear one by one. Press Space twice after all stimuli are shown.",
+        description: "Observe sequential single-letter stimuli at fixation. Press Space once during the sequence when 2 targets are detected.",
         ConfigComponent: OddballConfigComponent,
         RunComponent: OddballRun,
     },

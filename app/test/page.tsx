@@ -8,8 +8,7 @@ import type { Trial } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import { trackingService } from "@/lib/tracking-service"
 import { useTestStore } from "@/lib/stores/test-store"
-import { RecordingService } from "@/lib/recording-service"
-import { localDB } from "@/lib/local-db"
+import { RecordingService, downloadRecordingsLocally } from "@/lib/recording-service"
 import { CanvasRenderer } from "@/components/canvas-renderer"
 import { Camera, Monitor } from "lucide-react"
 
@@ -166,41 +165,15 @@ export default function TestPage() {
     if (!sessionId) return
 
     try {
-      const promises = []
+      const [screenBlob, cameraBlob] = await Promise.all([
+        recordingServiceRef.current?.stopRecording() ?? Promise.resolve(null),
+        cameraRecordingServiceRef.current?.stopRecording() ?? Promise.resolve(null),
+      ])
 
-      if (recordingServiceRef.current) {
-        promises.push(
-          recordingServiceRef.current.stopRecording().then(blob => {
-            if (blob) {
-              return localDB.saveRecording({
-                id: `${sessionId}-screen`,
-                sessionId,
-                type: "screen",
-                blob,
-                createdAt: new Date()
-              })
-            }
-          })
-        )
-      }
-
-      if (cameraRecordingServiceRef.current) {
-        promises.push(
-          cameraRecordingServiceRef.current.stopRecording().then(blob => {
-            if (blob) {
-              return localDB.saveRecording({
-                id: `${sessionId}-camera`,
-                sessionId,
-                type: "camera",
-                blob,
-                createdAt: new Date()
-              })
-            }
-          })
-        )
-      }
-
-      await Promise.all(promises)
+      await downloadRecordingsLocally(participantName || "participant", {
+        screen: screenBlob,
+        camera: cameraBlob,
+      })
 
       const trialsToPersist = pendingTrialsRef.current
       if (trialsToPersist.length > 0) {
