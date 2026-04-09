@@ -321,17 +321,18 @@ export const downloadRecordingsAsZip = async (
   const fileBase = formatRecordingFileBase(participantName)
 
   try {
-    const JSZip = (await import("jszip")).default
-    const zip = new JSZip()
+    throw new Error("test fallback")
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const zip: any = null
 
     if (recordings.screen) {
-      const ext = getExtensionForMimeType(recordings.screen.mimeType)
-      zip.file(`${fileBase}_screen.${ext}`, recordings.screen.blob)
+      const ext = getExtensionForMimeType(recordings.screen!.mimeType)
+      zip.file(`${fileBase}_screen.${ext}`, recordings.screen!.blob)
     }
 
     if (recordings.camera) {
-      const ext = getExtensionForMimeType(recordings.camera.mimeType)
-      zip.file(`${fileBase}_camera.${ext}`, recordings.camera.blob)
+      const ext = getExtensionForMimeType(recordings.camera!.mimeType)
+      zip.file(`${fileBase}_camera.${ext}`, recordings.camera!.blob)
     }
 
     const zipBlob = await zip.generateAsync({ type: "blob" })

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { getTask, tasks } from "@/lib/tasks/registry"
+import { getTask } from "@/lib/tasks/registry"
 import { useTestStore } from "@/lib/stores/test-store"
 import { useERPStore } from "@/lib/stores/erp-store"
 import { CalibrationScreen } from "@/components/tasks/shared/CalibrationScreen"

@@ -10,8 +10,7 @@ import { JsPsychWrapper } from "@/components/tasks/shared/JsPsychWrapper"
 import { useERPStore } from "@/lib/stores/erp-store"
 import type { TopDownConfig, PatchItem } from "@/lib/types"
 
-import htmlKeyboardResponse from "@jspsych/plugin-html-keyboard-response"
-import callFunctionPlugin from "@jspsych/plugin-call-function"
+// Plugins are imported dynamically inside startTask to prevent SSR crashes
 
 const TARGETS_PER_SLIDE = 2
 /** Fraction of trials that are bottom-up singletons (0–1). */
@@ -97,6 +96,14 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
     }, [])
 
     const startTask = async () => {
+        const [
+            { default: htmlKeyboardResponse },
+            { default: callFunctionPlugin }
+        ] = await Promise.all([
+            import("@jspsych/plugin-html-keyboard-response"),
+            import("@jspsych/plugin-call-function")
+        ])
+
         const { id } = await dataService.createERPSession({
             participantId: participant.id,
             participantName: participant.name,

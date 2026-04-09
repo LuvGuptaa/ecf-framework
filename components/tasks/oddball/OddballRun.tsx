@@ -8,8 +8,7 @@ import { JsPsychWrapper } from "@/components/tasks/shared/JsPsychWrapper"
 import { useERPStore } from "@/lib/stores/erp-store"
 import type { OddballConfig, PatchType } from "@/lib/types"
 
-import htmlKeyboardResponse from "@jspsych/plugin-html-keyboard-response"
-import callFunctionPlugin from "@jspsych/plugin-call-function"
+// Plugins are imported dynamically inside startTask to prevent SSR crashes
 
 interface OddballRunProps {
     config: OddballConfig
@@ -73,56 +72,6 @@ function generateStimulusSequence(config: OddballConfig): { letter: string; type
     return sequence
 }
 
-/**
- * Build an HTML stimulus that shows letters one-at-a-time using CSS animations,
- * with a 100ms blank gap between each letter.
- */
-function buildAnimatedOddballStimulus(
-    sequence: { letter: string; type: PatchType }[],
-    stimulusDuration: number,
-    trialIndex: number
-): { html: string; totalDuration: number } {
-    const BLANK_DURATION = 100 // ms between stimuli
-    const totalDuration = sequence.length * stimulusDuration + (sequence.length - 1) * BLANK_DURATION
-
-    const keyframes: string[] = []
-    const spans: string[] = []
-
-    let currentTime = 0
-    for (let idx = 0; idx < sequence.length; idx++) {
-        const stim = sequence[idx]
-        const keyframeName = `oddball_${trialIndex}_${idx}`
-
-        const startPct = (currentTime / totalDuration) * 100
-        const endPct = ((currentTime + stimulusDuration) / totalDuration) * 100
-        const hideBefore = Math.max(startPct - 0.01, 0)
-        const hideAfter = Math.min(endPct + 0.01, 100)
-
-        keyframes.push(`
-            @keyframes ${keyframeName} {
-                0%, ${hideBefore}% { opacity: 0; }
-                ${startPct}%, ${endPct}% { opacity: 1; }
-                ${hideAfter}%, 100% { opacity: 0; }
-            }
-        `)
-
-        spans.push(`<span style="position:absolute;opacity:0;animation:${keyframeName} ${totalDuration}ms linear 1 forwards;">${stim.letter}</span>`)
-
-        currentTime += stimulusDuration + BLANK_DURATION
-    }
-
-    const html = `
-        <div style="position:relative;width:100vw;height:100vh;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;">
-            <style>${keyframes.join("\n")}</style>
-            <div style="position:relative;width:140px;height:140px;display:flex;align-items:center;justify-content:center;font-size:120px;font-weight:700;color:#fff;font-family:'Courier New',Courier,monospace;line-height:1;user-select:none;">
-                ${spans.join("")}
-            </div>
-        </div>
-    `
-
-    return { html, totalDuration }
-}
-
 export function OddballRun({ config, participant, onComplete }: OddballRunProps) {
     const router = useRouter()
     const [phase, setPhase] = useState<"idle" | "running" | "complete">("idle")
@@ -130,6 +79,14 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
     const [timeline, setTimeline] = useState<Record<string, unknown>[]>([])
 
     const startTask = async () => {
+        const [
+            { default: htmlKeyboardResponse },
+            { default: callFunctionPlugin }
+        ] = await Promise.all([
+            import("@jspsych/plugin-html-keyboard-response"),
+            import("@jspsych/plugin-call-function")
+        ])
+
         const { id } = await dataService.createERPSession({
             participantId: participant.id,
             participantName: participant.name,
@@ -148,7 +105,6 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
             }
         })
 
-        const targetsNeeded = config.targetsToDetect || 2
         const BLANK_DURATION = 100
 
         for (let i = 0; i < config.numberOfTrials; i++) {

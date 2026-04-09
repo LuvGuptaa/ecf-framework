@@ -1,7 +1,6 @@
 "use client"
 
 import { useRef, useEffect } from "react"
-import "jspsych/css/jspsych.css"
 
 import { dataService } from "@/lib/data-service"
 
@@ -21,7 +20,6 @@ export function JsPsychWrapper({
     onFinish,
 }: JsPsychWrapperProps) {
     const containerRef = useRef<HTMLDivElement>(null)
-    const initRef = useRef(false)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const jsPsychRef = useRef<any>(null)
 
@@ -29,6 +27,7 @@ export function JsPsychWrapper({
         if (!containerRef.current) return
 
         let isCancelled = false
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let innerJsPsych: any = null
 
         const runExperiment = async () => {
@@ -85,13 +84,15 @@ export function JsPsychWrapper({
 
         runExperiment()
 
+        const node = containerRef.current
+
         return () => {
             isCancelled = true
             if (innerJsPsych) {
                 try {
                     // Clear the DOM since we might remount
-                    if (containerRef.current) {
-                        containerRef.current.innerHTML = ''
+                    if (node) {
+                        node.innerHTML = ''
                     }
                     innerJsPsych.endExperiment?.()
                 } catch { /* ignore */ }

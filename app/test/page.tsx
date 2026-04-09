@@ -189,7 +189,7 @@ export default function TestPage() {
       return
     }
     router.push(`/results?sessionId=${sessionId}`)
-  }, [sessionId, router, toast])
+  }, [sessionId, router, toast, participantName])
 
   const handleCellTap = useCallback(async (cellIndex: number, event: React.MouseEvent | React.TouchEvent) => {
     const state = useTestStore.getState()
