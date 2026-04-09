@@ -13,8 +13,7 @@ interface OddballConfigProps {
 
 export function OddballConfigComponent({ onConfigComplete }: OddballConfigProps) {
     const [config, setConfig] = useState<OddballConfig>({
-        targetProbability: 15,
-        distractorProbability: 15,
+        targetProbability: 10,
         numberOfTrials: 300,
         stimuliPerTrial: 18,
         maxTrialTime: 10000,
@@ -31,10 +30,7 @@ export function OddballConfigComponent({ onConfigComplete }: OddballConfigProps)
         }))
     }
 
-    const normalProbability = 100 - config.targetProbability - config.distractorProbability
-
     const handleSubmit = () => {
-        if (config.targetProbability + config.distractorProbability > 100) return
         onConfigComplete(config)
     }
 
@@ -46,43 +42,42 @@ export function OddballConfigComponent({ onConfigComplete }: OddballConfigProps)
                     <CardDescription>Configure stimulus probabilities and timing. Target letter is E, shown one at a time at screen center.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label>Target (E) Probability (%)</Label>
                             <Input
                                 type="number"
-                                min="0"
-                                max="100"
+                                min="1"
+                                max="50"
                                 value={config.targetProbability}
                                 onChange={(e) => handleChange("targetProbability", e.target.value)}
                             />
+                            <p className="text-xs text-muted-foreground">Poisson distribution — remaining stimuli are random non-E letters</p>
                         </div>
                         <div className="space-y-2">
-                            <Label>Distractor Probability (%)</Label>
+                            <Label>Targets to Detect</Label>
                             <Input
                                 type="number"
-                                min="0"
-                                max="100"
-                                value={config.distractorProbability}
-                                onChange={(e) => handleChange("distractorProbability", e.target.value)}
+                                min="1"
+                                max="10"
+                                value={config.targetsToDetect}
+                                onChange={(e) => handleChange("targetsToDetect", e.target.value)}
                             />
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Normal Probability (%)</Label>
-                            <Input type="number" value={normalProbability} disabled />
+                            <p className="text-xs text-muted-foreground">Trial ends after this many Es + 5 more letters</p>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-2">
-                            <Label>Stimuli per Trial</Label>
+                            <Label>Max Stimuli per Trial</Label>
                             <Input
                                 type="number"
-                                min="1"
+                                min="5"
                                 max="50"
                                 value={config.stimuliPerTrial}
                                 onChange={(e) => handleChange("stimuliPerTrial", e.target.value)}
                             />
+                            <p className="text-xs text-muted-foreground">Upper bound if fewer targets appear</p>
                         </div>
                         <div className="space-y-2">
                             <Label>Number of Trials</Label>
@@ -95,18 +90,19 @@ export function OddballConfigComponent({ onConfigComplete }: OddballConfigProps)
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label>Targets to Detect</Label>
+                            <Label>Stimulus Duration (ms)</Label>
                             <Input
                                 type="number"
-                                min="1"
-                                max="10"
-                                value={config.targetsToDetect}
-                                onChange={(e) => handleChange("targetsToDetect", e.target.value)}
+                                min="50"
+                                max="5000"
+                                step="50"
+                                value={config.stimulusDuration}
+                                onChange={(e) => handleChange("stimulusDuration", e.target.value)}
                             />
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-2">
                             <Label>Fixation Cross Duration (ms)</Label>
                             <Input
@@ -118,20 +114,6 @@ export function OddballConfigComponent({ onConfigComplete }: OddballConfigProps)
                                 onChange={(e) => handleChange("fixationDuration", e.target.value)}
                             />
                         </div>
-                        <div className="space-y-2">
-                            <Label>Stimulus Display Duration (ms)</Label>
-                            <Input
-                                type="number"
-                                min="100"
-                                max="5000"
-                                step="100"
-                                value={config.stimulusDuration}
-                                onChange={(e) => handleChange("stimulusDuration", e.target.value)}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label>Max Trial Time (ms)</Label>
                             <Input
@@ -163,8 +145,8 @@ export function OddballConfigComponent({ onConfigComplete }: OddballConfigProps)
                         </h4>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                             <div>
-                                <p className="text-muted-foreground">Stimuli/Trial</p>
-                                <p className="font-medium">{config.stimuliPerTrial}</p>
+                                <p className="text-muted-foreground">Target Prob.</p>
+                                <p className="font-medium">{config.targetProbability}%</p>
                             </div>
                             <div>
                                 <p className="text-muted-foreground">Trials</p>
@@ -175,12 +157,12 @@ export function OddballConfigComponent({ onConfigComplete }: OddballConfigProps)
                                 <p className="font-medium">{config.targetsToDetect}</p>
                             </div>
                             <div>
-                                <p className="text-muted-foreground">Fixation</p>
-                                <p className="font-medium">{config.fixationDuration}ms</p>
+                                <p className="text-muted-foreground">Stimulus</p>
+                                <p className="font-medium">{config.stimulusDuration}ms + 100ms blank</p>
                             </div>
                             <div>
-                                <p className="text-muted-foreground">Targets</p>
-                                <p className="font-medium">{config.targetProbability}%</p>
+                                <p className="text-muted-foreground">Fixation</p>
+                                <p className="font-medium">{config.fixationDuration}ms</p>
                             </div>
                             <div>
                                 <p className="text-muted-foreground">Max Time</p>
@@ -189,13 +171,8 @@ export function OddballConfigComponent({ onConfigComplete }: OddballConfigProps)
                         </div>
                     </div>
 
-                    {config.targetProbability + config.distractorProbability > 100 && (
-                        <p className="text-destructive text-sm">Target + Distractor probability cannot exceed 100%</p>
-                    )}
-
                     <Button
                         onClick={handleSubmit}
-                        disabled={config.targetProbability + config.distractorProbability > 100}
                         className="w-full h-14 text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
                         size="lg"
                     >

@@ -14,6 +14,9 @@ import htmlKeyboardResponse from "@jspsych/plugin-html-keyboard-response"
 import callFunctionPlugin from "@jspsych/plugin-call-function"
 
 const TARGETS_PER_SLIDE = 2
+/** Fraction of trials that are bottom-up singletons (0–1). */
+const BOTTOM_UP_RATIO = 0.2
+const BOTTOM_UP_COLOR = "#ff0000"
 
 interface TopDownRunProps {
     config: TopDownConfig
@@ -21,7 +24,7 @@ interface TopDownRunProps {
     onComplete: () => void
 }
 
-function generatePatches(config: TopDownConfig): PatchItem[] {
+function generateTopDownPatches(config: TopDownConfig): PatchItem[] {
     const totalCells = config.gridSize * config.gridSize
     const patches: PatchItem[] = []
 
@@ -58,6 +61,29 @@ function generatePatches(config: TopDownConfig): PatchItem[] {
     return patches
 }
 
+const ALL_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")
+function getRandomLetter(): string {
+    return ALL_LETTERS[Math.floor(Math.random() * ALL_LETTERS.length)]
+}
+
+function generateBottomUpPatches(gridSize: number): PatchItem[] {
+    const totalCells = gridSize * gridSize
+    const patches: PatchItem[] = []
+    const targetIndex = Math.floor(Math.random() * totalCells)
+    const targetLetter = getRandomLetter()
+
+    for (let i = 0; i < totalCells; i++) {
+        const row = Math.floor(i / gridSize)
+        const col = i % gridSize
+        if (i === targetIndex) {
+            patches.push({ type: "target", row, col, letter: targetLetter, color: BOTTOM_UP_COLOR })
+        } else {
+            patches.push({ type: "distractor", row, col, letter: getRandomLetter(), color: "#ffffff" })
+        }
+    }
+    return patches
+}
+
 export function TopDownRun({ config, participant, onComplete }: TopDownRunProps) {
     const router = useRouter()
     const [phase, setPhase] = useState<"idle" | "running" | "complete">("idle")
@@ -90,10 +116,22 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
         })
 
         for (let i = 0; i < config.numberOfTrials; i++) {
-            const patches = generatePatches(config)
+            const isBottomUp = Math.random() < BOTTOM_UP_RATIO
+            const patches = isBottomUp
+                ? generateBottomUpPatches(config.gridSize)
+                : generateTopDownPatches(config)
+
             const trialHtml = renderToString(
-                <ERPDisplay patches={patches} gridSize={config.gridSize} fullScreen patchSizeCm={config.patchSizeCm} showHashes={true} />
+                <ERPDisplay
+                    patches={patches}
+                    gridSize={config.gridSize}
+                    patchSizeCm={config.patchSizeCm}
+                    showHashes={!isBottomUp}
+                />
             )
+
+            // Wrap stimulus in a centered container so the grid doesn't cover the full screen
+            const wrappedStimulus = `<div style="width:100vw;height:100vh;background:#000;display:flex;align-items:center;justify-content:center;">${trialHtml}</div>`
 
             // Fixation cross before each trial
             newTimeline.push({
@@ -102,7 +140,7 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
                 choices: "NO_KEYS",
                 trial_duration: config.fixationDuration,
                 data: {
-                    task: 'top-down-fixation',
+                    task: isBottomUp ? 'bottom-up-fixation' : 'top-down-fixation',
                     trial_index: i,
                 },
             })
@@ -110,20 +148,21 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
             // Stimulus grid
             newTimeline.push({
                 type: htmlKeyboardResponse,
-                stimulus: trialHtml,
+                stimulus: wrappedStimulus,
                 choices: [" "],
                 trial_duration: config.maxTrialTime,
                 data: {
-                    task: 'top-down-trial',
+                    task: isBottomUp ? 'bottom-up-trial' : 'top-down-trial',
                     trial_index: i,
-                    targetCount: TARGETS_PER_SLIDE,
+                    targetCount: isBottomUp ? 1 : TARGETS_PER_SLIDE,
+                    isBottomUp,
                 },
             })
 
             // Inter-Trial Interval
             newTimeline.push({
                 type: htmlKeyboardResponse,
-                stimulus: '<div style="width: 100vw; height: 100vh; background: black; display: flex; align-items: center; justify-content: center;"><div style="width: 48px; height: 48px; border: 4px solid rgba(255,255,255,0.2); border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite;"></div></div>',
+                stimulus: '<div style="width: 100vw; height: 100vh; background: black;"></div>',
                 choices: "NO_KEYS",
                 trial_duration: config.interTrialInterval,
             })
@@ -139,6 +178,20 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
         setTimeline(newTimeline)
         setPhase("running")
     }
+
+    // Allow spacebar to start as well
+    useEffect(() => {
+        if (phase !== "idle") return
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.code === "Space" || e.key === " ") {
+                e.preventDefault()
+                startTask()
+            }
+        }
+        window.addEventListener("keydown", handleKeyDown)
+        return () => window.removeEventListener("keydown", handleKeyDown)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [phase, config, participant])
 
     const handleFinish = useCallback(() => {
         setPhase("complete")
@@ -156,13 +209,15 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
                     <h2 className="text-3xl font-bold">Top Down Conjunction Search</h2>
                     <p className="text-gray-300 text-lg">Find targets (<span className="font-mono">E</span>) among distractors (<span className="font-mono">Ǝ</span>) in the grid</p>
                     <p className="text-gray-400">Each slide has exactly {TARGETS_PER_SLIDE} targets, and both targets and distractors are shown as # patches</p>
-                    <p className="text-gray-400">Press <kbd className="px-2 py-1 bg-gray-700 rounded font-mono">Space</kbd> once after finding the targets</p>
+                    <p className="text-gray-400">Some trials will have a <strong style={{ color: BOTTOM_UP_COLOR }}>colored singleton</strong> — find it!</p>
+                    <p className="text-gray-400">Press <kbd className="px-2 py-1 bg-gray-700 rounded font-mono">Space</kbd> once after finding the target(s)</p>
                     <button
                         onClick={startTask}
                         className="px-8 py-4 bg-white text-black rounded-lg text-xl font-semibold hover:bg-gray-200 transition-colors"
                     >
                         Start Test
                     </button>
+                    <p className="text-gray-500 text-sm">or press <kbd className="px-1.5 py-0.5 bg-gray-700 rounded font-mono text-xs">Space</kbd> to begin</p>
                 </div>
             )}
 
@@ -182,10 +237,6 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
                     <p className="text-gray-300">Processing data...</p>
                 </div>
             )}
-            <style dangerouslySetInnerHTML={{
-                __html: `
-        @keyframes spin { 100% { transform: rotate(360deg); } }
-      `}} />
         </div>
     )
 }

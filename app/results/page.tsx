@@ -98,8 +98,11 @@ export default function ResultsPage() {
     let correctTrials = 0
 
     if (isERPSession(session)) {
-      correctTrials = (trials as ERPTrialData[]).filter((t) => !t.timedOut).length
-      totalWrongTaps = trials.length - correctTrials
+      const erpTrials = trials as ERPTrialData[]
+      // Only trials that required a response AND participant pressed space are counted logically in accuracy,
+      // but as a simple fallback, we use isCorrect and the presence of reactionTime
+      correctTrials = erpTrials.filter((t) => t.isCorrect && t.reactionTime > 0).length
+      totalWrongTaps = erpTrials.length - correctTrials
     } else {
       totalWrongTaps = (trials as Trial[]).reduce((sum, t) => sum + (t.wrongTaps?.length || 0), 0)
       correctTrials = (trials as Trial[]).filter((t) => t.isCorrect).length
@@ -316,8 +319,8 @@ export default function ResultsPage() {
                           </Badge>
                         </>
                       ) : (
-                        <Badge variant={(trial as ERPTrialData).timedOut ? "destructive" : "default"}>
-                          {(trial as ERPTrialData).timedOut ? "Timeout" : "Completed"}
+                        <Badge variant={((trial as ERPTrialData).reactionTime ?? 0) === 0 ? "destructive" : "default"}>
+                          {((trial as ERPTrialData).reactionTime ?? 0) === 0 ? "No Response" : "Responded"}
                         </Badge>
                       )}
                     </div>

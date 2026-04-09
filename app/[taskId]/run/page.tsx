@@ -6,10 +6,12 @@ import { getTask, tasks } from "@/lib/tasks/registry"
 import { useTestStore } from "@/lib/stores/test-store"
 import { useERPStore } from "@/lib/stores/erp-store"
 import { CalibrationScreen } from "@/components/tasks/shared/CalibrationScreen"
-import { RecordingService, downloadRecordingsLocally } from "@/lib/recording-service"
-import { Camera, Video } from "lucide-react"
+import { RecordingService, downloadRecordingsAsZip } from "@/lib/recording-service"
+import { Video, Monitor } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
-type RunPhase = "permission" | "pre-calibration" | "task" | "post-calibration" | "done"
+type RunPhase = "permission" | "pre-calibration" | "task" | "post-calibration" | "saving" | "done"
+type PermissionStep = "initial" | "screen-requested" | "screen-granted" | "camera-requested"
 
 export default function TaskRunPage({ params }: { params: { taskId: string } }) {
   const router = useRouter()
@@ -21,10 +23,11 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
   const calibrationDuration = useTestStore((state) => state.calibrationDuration)
 
   const [phase, setPhase] = useState<RunPhase>("permission")
-  const [isCameraRecording, setIsCameraRecording] = useState(false)
+  const [permissionStep, setPermissionStep] = useState<PermissionStep>("initial")
   const [permissionError, setPermissionError] = useState<string | null>(null)
 
   const cameraRecordingServiceRef = useRef<RecordingService | null>(null)
+  const screenRecordingServiceRef = useRef<RecordingService | null>(null)
 
   useEffect(() => {
     useERPStore.getState().resetSessionState()
@@ -41,24 +44,57 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
     }
   }, [task, participant, taskId, router])
 
-  const requestCameraAndStart = useCallback(async () => {
+  const requestScreenAccess = useCallback(async () => {
     setPermissionError(null)
+    setPermissionStep("screen-requested")
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 },
+        },
+        audio: false,
+        // @ts-expect-error - preferCurrentTab is a valid property in modern browsers
+        preferCurrentTab: true,
+      })
+      const screenRecorder = new RecordingService()
+      screenRecordingServiceRef.current = screenRecorder
+      await screenRecorder.startStreamRecording(screenStream)
+      
+      setPermissionStep("screen-granted")
+    } catch (err: unknown) {
+      setPermissionStep("initial")
+      const error = err as { name?: string }
+      if (error?.name === "NotAllowedError" || error?.name === "NotFoundError") {
+        setPermissionError("Screen recording permission was denied. This is required for the experiment.")
+      } else {
+        setPermissionError("Could not access screen recording. Please check browser permissions.")
+      }
+    }
+  }, [])
+
+  const requestCameraAccess = useCallback(async () => {
+    setPermissionError(null)
+    setPermissionStep("camera-requested")
     try {
       const cameraStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
         audio: false,
       })
-      const camRecorder = new RecordingService((state) => setIsCameraRecording(state.isRecording))
+      const camRecorder = new RecordingService()
       cameraRecordingServiceRef.current = camRecorder
       await camRecorder.startStreamRecording(cameraStream)
+      
       setPhase("pre-calibration")
     } catch (err: unknown) {
+      setPermissionStep("screen-granted")
       const error = err as { name?: string }
-      setPermissionError(
-        error?.name === "NotAllowedError"
-          ? "Camera permission was denied. Please allow camera access and try again."
-          : "Could not access camera. Please check your device and try again."
-      )
+      if (error?.name === "NotAllowedError") {
+        setPermissionError("Camera permission was denied. Both screen and camera are required.")
+      } else {
+        setPermissionError("Could not access camera. Please check your device and try again.")
+      }
     }
   }, [])
 
@@ -71,12 +107,34 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
   }, [])
 
   const handlePostCalibrationComplete = useCallback(async () => {
+    setPhase("saving")
+
+    const name = participant?.name || "participant"
+    let cameraResult: { blob: Blob; mimeType: string } | null = null
+    let screenResult: { blob: Blob; mimeType: string } | null = null
+
+    // Stop camera recording
     if (cameraRecordingServiceRef.current) {
       const blob = await cameraRecordingServiceRef.current.stopRecording()
-      const name = participant?.name || "participant"
       if (blob) {
-        await downloadRecordingsLocally(name, { camera: blob })
+        cameraResult = { blob, mimeType: cameraRecordingServiceRef.current.mimeType }
       }
+    }
+
+    // Stop screen recording
+    if (screenRecordingServiceRef.current) {
+      const blob = await screenRecordingServiceRef.current.stopRecording()
+      if (blob) {
+        screenResult = { blob, mimeType: screenRecordingServiceRef.current.mimeType }
+      }
+    }
+
+    // Download both as a zip
+    if (cameraResult || screenResult) {
+      await downloadRecordingsAsZip(name, {
+        screen: screenResult,
+        camera: cameraResult,
+      })
     }
 
     setPhase("done")
@@ -92,14 +150,16 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
     return (
       <div className="w-full h-screen bg-black flex flex-col items-center justify-center">
         <div className="text-center space-y-8 max-w-md px-6">
-          <div className="mx-auto w-20 h-20 rounded-full bg-white/10 flex items-center justify-center">
-            <Video className="h-10 w-10 text-white" />
+          <div className="mx-auto w-24 h-24 rounded-full bg-white/10 flex items-center justify-center space-x-2">
+            <Monitor className="h-8 w-8 text-white" />
+            <Video className="h-8 w-8 text-white" />
           </div>
+          
           <div className="space-y-3">
-            <h2 className="text-2xl font-bold text-white">Camera Permission Required</h2>
+            <h2 className="text-2xl font-bold text-white">Permissions Required</h2>
             <p className="text-gray-400 text-sm leading-relaxed">
-              This experiment records your face via the camera during the task for research purposes.
-              Please grant camera access when prompted by your browser.
+              This experiment requires both screen and camera recording for research purposes.
+              You will be prompted to grant these access rights sequentially.
             </p>
           </div>
 
@@ -109,12 +169,34 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
             </div>
           )}
 
-          <button
-            onClick={requestCameraAndStart}
-            className="px-8 py-4 bg-white text-black rounded-lg text-lg font-semibold hover:bg-gray-200 transition-colors"
-          >
-            Grant Camera Access & Start
-          </button>
+          <div className="flex flex-col space-y-4">
+            {permissionStep === "initial" || permissionStep === "screen-requested" ? (
+              <Button
+                onClick={requestScreenAccess}
+                disabled={permissionStep === "screen-requested"}
+                className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg"
+              >
+                {permissionStep === "screen-requested" ? "Waiting for Screen Share..." : "1. Share Entire Screen"}
+              </Button>
+            ) : (
+              <Button
+                disabled
+                className="w-full h-14 bg-green-900/50 text-green-400 border border-green-500/30 font-semibold text-lg"
+              >
+                ✓ Screen Shared
+              </Button>
+            )}
+
+            {(permissionStep === "screen-granted" || permissionStep === "camera-requested") && (
+              <Button
+                onClick={requestCameraAccess}
+                disabled={permissionStep === "camera-requested"}
+                className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg animate-in fade-in"
+              >
+                {permissionStep === "camera-requested" ? "Waiting for Camera..." : "2. Allow Camera Access"}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     )
@@ -122,25 +204,31 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
 
   if (phase === "pre-calibration") {
     return (
-      <>
-        <CalibrationScreen
-          duration={calibrationDuration}
-          onComplete={handlePreCalibrationComplete}
-        />
-        {isCameraRecording && <CameraIndicator />}
-      </>
+      <CalibrationScreen
+        duration={calibrationDuration}
+        onComplete={handlePreCalibrationComplete}
+      />
     )
   }
 
   if (phase === "post-calibration") {
     return (
-      <>
-        <CalibrationScreen
-          duration={calibrationDuration}
-          onComplete={handlePostCalibrationComplete}
-        />
-        {isCameraRecording && <CameraIndicator />}
-      </>
+      <CalibrationScreen
+        duration={calibrationDuration}
+        onComplete={handlePostCalibrationComplete}
+      />
+    )
+  }
+
+  if (phase === "saving") {
+    return (
+      <div className="w-full h-screen bg-black flex flex-col items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin mx-auto" />
+          <p className="text-white text-lg font-medium">Preparing recordings…</p>
+          <p className="text-gray-400 text-sm">Your zip file will download automatically.</p>
+        </div>
+      </div>
     )
   }
 
@@ -149,23 +237,10 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
   }
 
   return (
-    <>
-      <task.RunComponent
-        config={config}
-        participant={participant}
-        onComplete={handleTaskComplete}
-      />
-      {isCameraRecording && <CameraIndicator />}
-    </>
-  )
-}
-
-function CameraIndicator() {
-  return (
-    <div className="fixed top-4 right-4 flex items-center gap-2 bg-white/90 px-3 py-1.5 rounded-full shadow-sm border pointer-events-none z-[10000]">
-      <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse" />
-      <Camera className="h-3 w-3 text-slate-600" />
-      <span className="text-xs font-medium text-slate-600">CAM</span>
-    </div>
+    <task.RunComponent
+      config={config}
+      participant={participant}
+      onComplete={handleTaskComplete}
+    />
   )
 }

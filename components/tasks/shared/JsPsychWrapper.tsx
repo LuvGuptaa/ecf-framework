@@ -26,20 +26,20 @@ export function JsPsychWrapper({
     const jsPsychRef = useRef<any>(null)
 
     useEffect(() => {
-        if (!containerRef.current || initRef.current) return
-        initRef.current = true
+        if (!containerRef.current) return
 
         let isCancelled = false
+        let innerJsPsych: any = null
 
         const runExperiment = async () => {
             const { initJsPsych } = await import('jspsych')
 
             if (isCancelled) return
 
-            const jsPsych = initJsPsych({
+            innerJsPsych = initJsPsych({
                 display_element: containerRef.current!,
                 on_finish: async () => {
-                    const trials = jsPsych.data.get().values()
+                    const trials = innerJsPsych.data.get().values()
 
                     const taskTrials = trials.filter(
                         (t: Record<string, unknown>) =>
@@ -72,23 +72,34 @@ export function JsPsychWrapper({
                         completedAt: new Date(),
                     })
 
-                    if (onFinish) onFinish()
+                    if (onFinish && !isCancelled) onFinish()
                 },
             })
 
-            jsPsychRef.current = jsPsych
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            jsPsych.run(timeline as any)
+            jsPsychRef.current = innerJsPsych
+            if (!isCancelled) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                innerJsPsych.run(timeline as any)
+            }
         }
 
         runExperiment()
 
         return () => {
             isCancelled = true
+            if (innerJsPsych) {
+                try {
+                    // Clear the DOM since we might remount
+                    if (containerRef.current) {
+                        containerRef.current.innerHTML = ''
+                    }
+                    innerJsPsych.endExperiment?.()
+                } catch { /* ignore */ }
+            }
             if (jsPsychRef.current) {
                 try {
-                    jsPsychRef.current.endExperiment()
-                } catch { /* already ended */ }
+                    jsPsychRef.current.endExperiment?.()
+                } catch { /* ignore */ }
             }
         }
     }, [timeline, participantId, sessionId, taskName, onFinish])
