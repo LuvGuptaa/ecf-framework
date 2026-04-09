@@ -65,21 +65,40 @@ function getRandomLetter(): string {
     return ALL_LETTERS[Math.floor(Math.random() * ALL_LETTERS.length)]
 }
 
-function generateBottomUpPatches(gridSize: number): PatchItem[] {
-    const totalCells = gridSize * gridSize
+function generateBottomUpPatches(config: TopDownConfig): PatchItem[] {
+    const totalCells = config.gridSize * config.gridSize
     const patches: PatchItem[] = []
-    const targetIndex = Math.floor(Math.random() * totalCells)
-    const targetLetter = getRandomLetter()
 
-    for (let i = 0; i < totalCells; i++) {
-        const row = Math.floor(i / gridSize)
-        const col = i % gridSize
-        if (i === targetIndex) {
-            patches.push({ type: "target", row, col, letter: targetLetter, color: BOTTOM_UP_COLOR })
-        } else {
-            patches.push({ type: "distractor", row, col, letter: getRandomLetter(), color: "#ffffff" })
-        }
+    const fillCount = Math.round((config.fillPercentage / 100) * totalCells)
+    const allIndices = Array.from({ length: totalCells }, (_, i) => i)
+
+    // Shuffle indices
+    for (let i = allIndices.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+            ;[allIndices[i], allIndices[j]] = [allIndices[j], allIndices[i]]
     }
+    const filledIndices = allIndices.slice(0, fillCount)
+
+    // Bottom up has exactly 1 target, rest are distractors
+    const targetCount = 1
+
+    filledIndices.forEach((cellIndex, idx) => {
+        const row = Math.floor(cellIndex / config.gridSize)
+        const col = cellIndex % config.gridSize
+
+        if (idx < targetCount) {
+            patches.push({ type: "target", row, col, color: BOTTOM_UP_COLOR })
+        } else {
+            patches.push({ type: "distractor", row, col })
+        }
+    })
+
+    // Shuffle patches so target isn't always first in grid
+    for (let i = patches.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+            ;[patches[i], patches[j]] = [patches[j], patches[i]]
+    }
+
     return patches
 }
 
@@ -125,7 +144,7 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
         for (let i = 0; i < config.numberOfTrials; i++) {
             const isBottomUp = Math.random() < BOTTOM_UP_RATIO
             const patches = isBottomUp
-                ? generateBottomUpPatches(config.gridSize)
+                ? generateBottomUpPatches(config)
                 : generateTopDownPatches(config)
 
             const trialHtml = renderToString(
@@ -133,7 +152,7 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
                     patches={patches}
                     gridSize={config.gridSize}
                     patchSizeCm={config.patchSizeCm}
-                    showHashes={!isBottomUp}
+                    showHashes={true}
                 />
             )
 
