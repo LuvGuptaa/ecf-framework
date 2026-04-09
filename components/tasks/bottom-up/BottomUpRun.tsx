@@ -89,7 +89,7 @@ export function BottomUpRun({ config, participant, onComplete }: BottomUpRunProp
             const patches = generatePatches(config)
 
             const trialHtml = renderToString(
-                <ERPDisplay patches={patches} gridSize={config.gridSize} showHashes={false} />
+                <ERPDisplay patches={patches} gridSize={config.gridSize} showHashes={true} />
             )
 
             // Fixation cross before each trial
