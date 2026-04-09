@@ -21,9 +21,15 @@ export class RecordingService {
   private startTime = 0
   private pausedTime = 0
   private onStateChange?: (state: RecordingState) => void
+  private _mimeType: string = "video/webm"
 
   constructor(onStateChange?: (state: RecordingState) => void) {
     this.onStateChange = onStateChange
+  }
+
+  /** The actual MIME type being used for recording. */
+  get mimeType(): string {
+    return this._mimeType
   }
 
   // Start screen recording
@@ -37,6 +43,8 @@ export class RecordingService {
           frameRate: { ideal: 30 },
         },
         audio: options.audio,
+        // @ts-expect-error - preferCurrentTab is a valid option in modern browsers
+        preferCurrentTab: true,
       })
 
       await this.initializeRecording(stream, options)
@@ -79,50 +87,6 @@ export class RecordingService {
     }
   }
 
-  // Start combined recording (screen + camera)
-  async startCombinedRecording(options: RecordingOptions = { video: true, audio: false }): Promise<void> {
-    try {
-      // Get both screen and camera streams
-      const [screenStream, cameraStream] = await Promise.all([
-        navigator.mediaDevices.getDisplayMedia({
-          video: {
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            frameRate: { ideal: 30 },
-          },
-          audio: options.audio,
-        }),
-        navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: "user",
-            width: { ideal: 640 },
-            height: { ideal: 480 },
-            frameRate: { ideal: 30 },
-          },
-          audio: false, // Avoid audio feedback
-        }),
-      ])
-
-      // Combine streams (this is a simplified approach - in production you might want to use canvas composition)
-      const combinedStream = new MediaStream([
-        ...screenStream.getVideoTracks(),
-        ...cameraStream.getVideoTracks(),
-        ...(options.audio ? screenStream.getAudioTracks() : []),
-      ])
-
-      await this.initializeRecording(combinedStream, options)
-    } catch (error) {
-      console.error("Error starting combined recording:", error)
-      this.notifyStateChange({
-        isRecording: false,
-        isPaused: false,
-        duration: 0,
-        error: "Failed to start combined recording",
-      })
-      throw error
-    }
-  }
-
   // Start recording from an existing stream (e.g. Canvas captureStream)
   async startStreamRecording(stream: MediaStream, options: RecordingOptions = { video: true, audio: false }): Promise<void> {
     try {
@@ -143,8 +107,9 @@ export class RecordingService {
     this.stream = stream
     this.recordedChunks = []
 
-    // Determine the best supported MIME type
+    // Determine the best supported MIME type (prefer MP4)
     const mimeType = this.getSupportedMimeType(options.mimeType)
+    this._mimeType = mimeType
 
     const mediaRecorderOptions: MediaRecorderOptions = {
       mimeType,
@@ -200,9 +165,15 @@ export class RecordingService {
   }
 
   private getSupportedMimeType(preferredType?: string): string {
-    const types = [preferredType, "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"].filter(
-      Boolean,
-    ) as string[]
+    // Prefer MP4, then WebM VP9/VP8
+    const types = [
+      preferredType,
+      "video/mp4;codecs=avc1",
+      "video/mp4",
+      "video/webm;codecs=vp9",
+      "video/webm;codecs=vp8",
+      "video/webm",
+    ].filter(Boolean) as string[]
 
     for (const type of types) {
       if (MediaRecorder.isTypeSupported(type)) {
@@ -237,7 +208,7 @@ export class RecordingService {
 
       this.mediaRecorder.onstop = () => {
         const blob = new Blob(this.recordedChunks, {
-          type: this.mediaRecorder?.mimeType || "video/webm",
+          type: this._mimeType,
         })
 
         // Clean up
@@ -312,12 +283,14 @@ export const downloadBlob = (blob: Blob, filename: string): void => {
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  // Delay revoke to avoid early cancellation dropping the filename in Chrome
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-// Utility function to create video preview
-export const createVideoPreview = (blob: Blob): string => {
-  return URL.createObjectURL(blob)
+/** Return the appropriate file extension for a MIME type. */
+const getExtensionForMimeType = (mimeType: string): string => {
+  if (mimeType.startsWith("video/mp4")) return "mp4"
+  return "webm"
 }
 
 const formatRecordingFileBase = (participantName: string): string => {
@@ -334,7 +307,50 @@ const formatRecordingFileBase = (participantName: string): string => {
   return `${normalizedName}_${timestamp}`
 }
 
-// Download screen and/or camera recordings as separate local files.
+/**
+ * Download screen and camera recordings as a single zip file.
+ * Falls back to individual downloads if JSZip is unavailable.
+ */
+export const downloadRecordingsAsZip = async (
+  participantName: string,
+  recordings: {
+    screen?: { blob: Blob; mimeType: string } | null
+    camera?: { blob: Blob; mimeType: string } | null
+  },
+): Promise<void> => {
+  const fileBase = formatRecordingFileBase(participantName)
+
+  try {
+    const JSZip = (await import("jszip")).default
+    const zip = new JSZip()
+
+    if (recordings.screen) {
+      const ext = getExtensionForMimeType(recordings.screen.mimeType)
+      zip.file(`${fileBase}_screen.${ext}`, recordings.screen.blob)
+    }
+
+    if (recordings.camera) {
+      const ext = getExtensionForMimeType(recordings.camera.mimeType)
+      zip.file(`${fileBase}_camera.${ext}`, recordings.camera.blob)
+    }
+
+    const zipBlob = await zip.generateAsync({ type: "blob" })
+    downloadBlob(zipBlob, `${fileBase}_recordings.zip`)
+  } catch (error) {
+    console.error("Failed to create zip, downloading individually:", error)
+    // Fallback: download files individually
+    if (recordings.screen) {
+      const ext = getExtensionForMimeType(recordings.screen.mimeType)
+      downloadBlob(recordings.screen.blob, `${fileBase}_screen.${ext}`)
+    }
+    if (recordings.camera) {
+      const ext = getExtensionForMimeType(recordings.camera.mimeType)
+      downloadBlob(recordings.camera.blob, `${fileBase}_camera.${ext}`)
+    }
+  }
+}
+
+// Legacy function kept for compatibility
 export const downloadRecordingsLocally = async (
   participantName: string,
   recordings: { screen?: Blob | null; camera?: Blob | null },

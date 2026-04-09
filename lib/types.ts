@@ -126,7 +126,6 @@ export interface TopDownConfig {
 
 export interface OddballConfig {
   targetProbability: number
-  distractorProbability: number
   numberOfTrials: number
   stimuliPerTrial: number
   maxTrialTime: number

@@ -23,32 +23,78 @@ function getRandomNonTargetLetter(): string {
     return NON_TARGET_LETTERS[Math.floor(Math.random() * NON_TARGET_LETTERS.length)]
 }
 
+/**
+ * Generate a stimulus sequence with Poisson-distributed targets (E).
+ *
+ * Rules:
+ * - Each position has `targetProbability`% chance of being E
+ * - No two consecutive Es
+ * - Trial ends exactly 5 letters after the Nth target (N = targetsToDetect)
+ * - If the Nth target never appears within `stimuliPerTrial` letters, end anyway
+ */
 function generateStimulusSequence(config: OddballConfig): { letter: string; type: PatchType }[] {
     const sequence: { letter: string; type: PatchType }[] = []
+    const targetProb = config.targetProbability / 100
+    const targetsNeeded = config.targetsToDetect || 2
+    let targetsSeen = 0
+    let lettersAfterLastNeededTarget = -1 // -1 means we haven't hit target N yet
+    let lastWasTarget = false
+
     for (let i = 0; i < config.stimuliPerTrial; i++) {
-        const rand = Math.random() * 100
-        if (rand < config.targetProbability) {
+        // Check if we've completed 5 letters after the Nth target
+        if (lettersAfterLastNeededTarget >= 5) {
+            break
+        }
+
+        let isTarget = false
+        if (!lastWasTarget && targetsSeen < 100) {
+            // Poisson-style: each slot independently has targetProb chance
+            isTarget = Math.random() < targetProb
+        }
+
+        if (isTarget) {
             sequence.push({ letter: "E", type: "target" })
-        } else if (rand < config.targetProbability + config.distractorProbability) {
-            sequence.push({ letter: getRandomNonTargetLetter(), type: "distractor" })
+            targetsSeen++
+            lastWasTarget = true
+
+            if (targetsSeen >= targetsNeeded && lettersAfterLastNeededTarget === -1) {
+                lettersAfterLastNeededTarget = 0
+            }
         } else {
             sequence.push({ letter: getRandomNonTargetLetter(), type: "normal" })
+            lastWasTarget = false
+
+            if (lettersAfterLastNeededTarget >= 0) {
+                lettersAfterLastNeededTarget++
+            }
         }
     }
+
     return sequence
 }
 
+/**
+ * Build an HTML stimulus that shows letters one-at-a-time using CSS animations,
+ * with a 100ms blank gap between each letter.
+ */
 function buildAnimatedOddballStimulus(
     sequence: { letter: string; type: PatchType }[],
     stimulusDuration: number,
     trialIndex: number
-): string {
-    const totalDuration = sequence.length * stimulusDuration
+): { html: string; totalDuration: number } {
+    const BLANK_DURATION = 100 // ms between stimuli
+    const totalDuration = sequence.length * stimulusDuration + (sequence.length - 1) * BLANK_DURATION
+
     const keyframes: string[] = []
-    const spans = sequence.map((stim, idx) => {
+    const spans: string[] = []
+
+    let currentTime = 0
+    for (let idx = 0; idx < sequence.length; idx++) {
+        const stim = sequence[idx]
         const keyframeName = `oddball_${trialIndex}_${idx}`
-        const startPct = (idx / sequence.length) * 100
-        const endPct = ((idx + 1) / sequence.length) * 100
+
+        const startPct = (currentTime / totalDuration) * 100
+        const endPct = ((currentTime + stimulusDuration) / totalDuration) * 100
         const hideBefore = Math.max(startPct - 0.01, 0)
         const hideAfter = Math.min(endPct + 0.01, 100)
 
@@ -60,10 +106,12 @@ function buildAnimatedOddballStimulus(
             }
         `)
 
-        return `<span style="position:absolute;opacity:0;animation:${keyframeName} ${totalDuration}ms linear 1 forwards;">${stim.letter}</span>`
-    })
+        spans.push(`<span style="position:absolute;opacity:0;animation:${keyframeName} ${totalDuration}ms linear 1 forwards;">${stim.letter}</span>`)
 
-    return `
+        currentTime += stimulusDuration + BLANK_DURATION
+    }
+
+    const html = `
         <div style="position:relative;width:100vw;height:100vh;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;">
             <style>${keyframes.join("\n")}</style>
             <div style="position:relative;width:140px;height:140px;display:flex;align-items:center;justify-content:center;font-size:120px;font-weight:700;color:#fff;font-family:'Courier New',Courier,monospace;line-height:1;user-select:none;">
@@ -71,6 +119,8 @@ function buildAnimatedOddballStimulus(
             </div>
         </div>
     `
+
+    return { html, totalDuration }
 }
 
 export function OddballRun({ config, participant, onComplete }: OddballRunProps) {
@@ -99,15 +149,15 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
         })
 
         const targetsNeeded = config.targetsToDetect || 2
+        const BLANK_DURATION = 100
 
         for (let i = 0; i < config.numberOfTrials; i++) {
             const sequence = generateStimulusSequence(config)
-            const trialDuration = Math.max(1, sequence.length * config.stimulusDuration)
 
             // Fixation cross before every trial
             newTimeline.push({
                 type: htmlKeyboardResponse,
-                stimulus: '<div style="font-size: 80px; font-weight: 700; color: #fff; font-family: monospace; display: flex; align-items: center; justify-content: center; width: 100vw; height: 100vh;">+</div>',
+                stimulus: '<div style="font-size: 80px; font-weight: 700; color: #fff; font-family: monospace; display: flex; align-items: center; justify-content: center; width: 100vw; height: 100vh; background: #000;">+</div>',
                 choices: "NO_KEYS",
                 trial_duration: config.fixationDuration,
                 data: {
@@ -116,31 +166,50 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
                 },
             })
 
-            // Present the full stimulus sequence in one trial.
-            // Participant presses Space once while the sequence is visible.
-            newTimeline.push({
-                type: htmlKeyboardResponse,
-                stimulus: buildAnimatedOddballStimulus(sequence, config.stimulusDuration, i),
-                choices: [" "],
-                trial_duration: trialDuration,
-                data: {
-                    task: 'oddball-trial',
-                    trial_index: i,
-                    targetsNeeded,
-                    sequence_letters: sequence.map((s) => s.letter),
-                    sequence_types: sequence.map((s) => s.type),
-                    sequence_duration: trialDuration,
-                },
-                on_finish: (data: Record<string, unknown>) => {
-                    data.space_pressed = data.response !== null
-                    data.response_timestamp_ms = (data.rt as number | null) ?? null
-                },
+            // Run the sequence. For Oddball, we usually want them to press Space whenever.
+            // Using a jsPsych timeline variable or just a loop of trials.
+            sequence.forEach((stim, stimIdx) => {
+                const stimHtml = `
+                    <div style="position:relative;width:100vw;height:100vh;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+                        <div style="position:relative;width:140px;height:140px;display:flex;align-items:center;justify-content:center;font-size:120px;font-weight:700;color:#fff;font-family:'Courier New',Courier,monospace;line-height:1;user-select:none;">
+                            ${stim.letter}
+                        </div>
+                    </div>
+                `
+                // The letter stimulus
+                newTimeline.push({
+                    type: htmlKeyboardResponse,
+                    stimulus: stimHtml,
+                    choices: [" "],
+                    trial_duration: config.stimulusDuration,
+                    response_ends_trial: false, // Don't end trial early if they press space
+                    data: {
+                        task: 'oddball-trial', // Mark this so it gets saved to firebase
+                        trial_index: i,
+                        stimulus_index: stimIdx,
+                        letter: stim.letter,
+                        target_type: stim.type,
+                    },
+                    on_finish: (data: Record<string, unknown>) => {
+                        data.space_pressed = data.response !== null
+                        data.response_timestamp_ms = (data.rt as number | null) ?? null
+                    },
+                })
+
+                // The 100ms blank gap
+                newTimeline.push({
+                    type: htmlKeyboardResponse,
+                    stimulus: '<div style="width: 100vw; height: 100vh; background: #000;"></div>',
+                    choices: [" "],
+                    trial_duration: BLANK_DURATION,
+                    response_ends_trial: false,
+                })
             })
 
-            // Inter-Trial Interval
+            // Inter-Trial Interval (blank black screen)
             newTimeline.push({
                 type: htmlKeyboardResponse,
-                stimulus: '<div style="width: 100vw; height: 100vh; background: black; display: flex; align-items: center; justify-content: center;"><div style="width: 48px; height: 48px; border: 4px solid rgba(255,255,255,0.2); border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite;"></div></div>',
+                stimulus: '<div style="width: 100vw; height: 100vh; background: black;"></div>',
                 choices: "NO_KEYS",
                 trial_duration: config.interTrialInterval,
             })
@@ -176,6 +245,7 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
                     <p className="text-gray-300 text-lg">A fixation cross appears every trial, then single letters are shown at the same center location</p>
                     <p className="text-gray-400">Target letter is <kbd className="px-2 py-1 bg-gray-700 rounded font-mono text-white">E</kbd></p>
                     <p className="text-gray-400">Press <kbd className="px-2 py-1 bg-gray-700 rounded font-mono">Space</kbd> once, during the sequence, when you detect {targetsNeeded} targets</p>
+                    <p className="text-gray-500 text-sm">Trial ends 5 letters after the {targetsNeeded === 2 ? "2nd" : `${targetsNeeded}th`} E</p>
                     <button
                         onClick={startTask}
                         className="px-8 py-4 bg-white text-black rounded-lg text-xl font-semibold hover:bg-gray-200 transition-colors"
@@ -201,10 +271,6 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
                     <p className="text-gray-300">Processing data...</p>
                 </div>
             )}
-            <style dangerouslySetInnerHTML={{
-                __html: `
-        @keyframes spin { 100% { transform: rotate(360deg); } }
-      `}} />
         </div>
     )
 }
