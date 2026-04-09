@@ -162,7 +162,7 @@ export function ReactionRun({ config, participant, onComplete }: ReactionRunProp
             router.push(`/results?sessionId=${sessionId}`)
         }
 
-    }, [sessionId, router, toast, onComplete])
+    }, [sessionId, router, toast, onComplete, participant.name])
 
     const handleCellTap = useCallback(async (cellIndex: number, event: React.MouseEvent | React.TouchEvent) => {
         const state = useTestStore.getState()
