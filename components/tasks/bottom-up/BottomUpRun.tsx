@@ -19,6 +19,8 @@ interface BottomUpRunProps {
     onComplete: () => void
 }
 
+const CENTERED_BLACK_CONTAINER_STYLE = "width:100vw;height:100vh;background:black;display:flex;align-items:center;justify-content:center;"
+
 function generatePatches(config: BottomUpConfig): PatchItem[] {
     const totalCells = config.gridSize * config.gridSize
     const patches: PatchItem[] = []
@@ -79,12 +81,12 @@ export function BottomUpRun({ config, participant, onComplete }: BottomUpRunProp
             const trialHtml = renderToString(
                 <ERPDisplay patches={patches} gridSize={config.gridSize} showHashes={true} />
             )
-            const wrappedStimulus = `<div style="width:100vw;height:100vh;background:#000;display:flex;align-items:center;justify-content:center;">${trialHtml}</div>`
+            const wrappedStimulus = `<div style="${CENTERED_BLACK_CONTAINER_STYLE}">${trialHtml}</div>`
 
             // Fixation cross before each trial
             newTimeline.push({
                 type: htmlKeyboardResponse,
-                stimulus: '<div style="width: 100vw; height: 100vh; background: black; display: flex; align-items: center; justify-content: center;"><div style="font-size: 80px; font-weight: 700; color: #fff; font-family: monospace;">+</div></div>',
+                stimulus: `<div style="${CENTERED_BLACK_CONTAINER_STYLE}"><div style="font-size: 80px; font-weight: 700; color: #fff; font-family: monospace;">+</div></div>`,
                 choices: "NO_KEYS",
                 trial_duration: config.fixationDuration,
                 data: {

@@ -102,7 +102,7 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
     const [sessionId, setSessionId] = useState<string | null>(null)
     const [timeline, setTimeline] = useState<Record<string, unknown>[]>([])
 
-    const startTask = async () => {
+    const startTask = useCallback(async () => {
         const [
             { default: htmlKeyboardResponse },
             { default: callFunctionPlugin }
@@ -133,7 +133,7 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
 
         for (let i = 0; i < config.numberOfTrials; i++) {
             const sequence = generateStimulusSequence(config)
-            let trialEndedBySpace = false
+            let shouldSkipRemainingStimuli = false
 
             // Fixation cross before every trial
             newTimeline.push({
@@ -177,11 +177,11 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
                             data.space_pressed = pressedSpace
                             data.response_timestamp_ms = (data.rt as number | null) ?? null
                             if (pressedSpace) {
-                                trialEndedBySpace = true
+                                shouldSkipRemainingStimuli = true
                             }
                         },
                     }],
-                    conditional_function: () => !trialEndedBySpace,
+                    conditional_function: () => !shouldSkipRemainingStimuli,
                 })
 
                 // The 100ms blank gap
@@ -194,11 +194,11 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
                         response_ends_trial: true,
                         on_finish: (data: Record<string, unknown>) => {
                             if (data.response !== null) {
-                                trialEndedBySpace = true
+                                shouldSkipRemainingStimuli = true
                             }
                         },
                     }],
-                    conditional_function: () => !trialEndedBySpace,
+                    conditional_function: () => !shouldSkipRemainingStimuli,
                 })
             })
 
@@ -220,7 +220,7 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
 
         setTimeline(newTimeline)
         setPhase("running")
-    }
+    }, [config, participant.id, participant.name])
 
     useEffect(() => {
         if (phase !== "idle") return
@@ -232,8 +232,7 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
         }
         window.addEventListener("keydown", handleKeyDown)
         return () => window.removeEventListener("keydown", handleKeyDown)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [phase])
+    }, [phase, startTask])
 
     const handleFinish = useCallback(() => {
         setPhase("complete")
@@ -253,7 +252,7 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
                     <h2 className="text-3xl font-bold">Visual Oddball</h2>
                     <p className="text-gray-300 text-lg">A fixation cross appears every trial, then single letters are shown at the same center location</p>
                     <p className="text-gray-400">Target letter is <kbd className="px-2 py-1 bg-gray-700 rounded font-mono text-white">E</kbd></p>
-                    <p className="text-gray-400">Each trial contains at least 2 target letters (<kbd className="px-1.5 py-0.5 bg-gray-700 rounded font-mono text-xs">E</kbd>)</p>
+                    <p className="text-gray-400">Each trial contains at least {targetsNeeded} target letters (<kbd className="px-1.5 py-0.5 bg-gray-700 rounded font-mono text-xs">E</kbd>) with a minimum of 2</p>
                     <p className="text-gray-400">Press <kbd className="px-2 py-1 bg-gray-700 rounded font-mono">Space</kbd> when you detect {targetsNeeded} targets — the trial ends immediately</p>
                     <button
                         onClick={startTask}
