@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { dataService } from "@/lib/data-service"
 import { trackingService } from "@/lib/tracking-service"
@@ -17,55 +17,62 @@ interface OddballRunProps {
 }
 
 const NON_TARGET_LETTERS = "ABCDFGHIJKLMNOPQRSTUVWXYZ".split("") // excludes E
+const REQUIRED_TARGETS = 2
+const LETTERS_AFTER_SECOND_TARGET = 5
 
 function getRandomNonTargetLetter(): string {
     return NON_TARGET_LETTERS[Math.floor(Math.random() * NON_TARGET_LETTERS.length)]
 }
 
 /**
- * Generate a stimulus sequence with Poisson-distributed targets (E).
+ * Generate a sequence that always contains at least two targets (E).
  *
  * Rules:
  * - Each position has `targetProbability`% chance of being E
- * - No two consecutive Es
- * - Trial ends exactly 5 letters after the Nth target (N = targetsToDetect)
- * - If the Nth target never appears within `stimuliPerTrial` letters, end anyway
+ * - No consecutive Es
+ * - If no response occurs, sequence ends after the 2nd E + 5 more letters
+ * - The trailing 5 letters can include E as well
  */
 function generateStimulusSequence(config: OddballConfig): { letter: string; type: PatchType }[] {
     const sequence: { letter: string; type: PatchType }[] = []
     const targetProb = config.targetProbability / 100
-    const targetsNeeded = config.targetsToDetect || 2
     let targetsSeen = 0
-    let lettersAfterLastNeededTarget = -1 // -1 means we haven't hit target N yet
     let lastWasTarget = false
 
-    for (let i = 0; i < config.stimuliPerTrial; i++) {
-        // Check if we've completed 5 letters after the Nth target
-        if (lettersAfterLastNeededTarget >= 5) {
-            break
-        }
+    // Reserve enough room to place two non-consecutive Es before the trailing window.
+    const minPrefixLengthForNonConsecutiveTargets = (REQUIRED_TARGETS * 2) - 1
+    const maxPrefixLength = Math.max(
+        config.stimuliPerTrial - LETTERS_AFTER_SECOND_TARGET,
+        minPrefixLengthForNonConsecutiveTargets,
+    )
 
-        let isTarget = false
-        if (!lastWasTarget && targetsSeen < 100) {
-            // Poisson-style: each slot independently has targetProb chance
-            isTarget = Math.random() < targetProb
-        }
+    while (targetsSeen < REQUIRED_TARGETS) {
+        const targetsRemaining = REQUIRED_TARGETS - targetsSeen
+        const slotsRemaining = maxPrefixLength - sequence.length
 
-        if (isTarget) {
+        const targetFeasible = !lastWasTarget && (slotsRemaining - 1) >= (targetsRemaining > 1 ? 2 * (targetsRemaining - 1) : 0)
+        const normalFeasible = (slotsRemaining - 1) >= ((2 * targetsRemaining) - 1)
+
+        const shouldPlaceTarget = targetFeasible && (!normalFeasible || Math.random() < targetProb)
+
+        if (shouldPlaceTarget) {
             sequence.push({ letter: "E", type: "target" })
             targetsSeen++
             lastWasTarget = true
-
-            if (targetsSeen >= targetsNeeded && lettersAfterLastNeededTarget === -1) {
-                lettersAfterLastNeededTarget = 0
-            }
         } else {
             sequence.push({ letter: getRandomNonTargetLetter(), type: "normal" })
             lastWasTarget = false
+        }
+    }
 
-            if (lettersAfterLastNeededTarget >= 0) {
-                lettersAfterLastNeededTarget++
-            }
+    for (let i = 0; i < LETTERS_AFTER_SECOND_TARGET; i++) {
+        const isTarget = !lastWasTarget && Math.random() < targetProb
+        if (isTarget) {
+            sequence.push({ letter: "E", type: "target" })
+            lastWasTarget = true
+        } else {
+            sequence.push({ letter: getRandomNonTargetLetter(), type: "normal" })
+            lastWasTarget = false
         }
     }
 
@@ -79,6 +86,8 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
     const [timeline, setTimeline] = useState<Record<string, unknown>[]>([])
 
     const startTask = async () => {
+        if (phase !== "idle") return
+
         const [
             { default: htmlKeyboardResponse },
             { default: callFunctionPlugin }
@@ -109,6 +118,7 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
 
         for (let i = 0; i < config.numberOfTrials; i++) {
             const sequence = generateStimulusSequence(config)
+            let endCurrentTrial = false
 
             // Fixation cross before every trial
             newTimeline.push({
@@ -134,32 +144,54 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
                 `
                 // The letter stimulus
                 newTimeline.push({
-                    type: htmlKeyboardResponse,
-                    stimulus: stimHtml,
-                    choices: [" "],
-                    trial_duration: config.stimulusDuration,
-                    response_ends_trial: false, // Don't end trial early if they press space
-                    data: {
-                        task: 'oddball-trial', // Mark this so it gets saved to firebase
-                        trial_index: i,
-                        stimulus_index: stimIdx,
-                        letter: stim.letter,
-                        target_type: stim.type,
-                    },
-                    on_finish: (data: Record<string, unknown>) => {
-                        data.space_pressed = data.response !== null
-                        data.response_timestamp_ms = (data.rt as number | null) ?? null
-                    },
+                    timeline: [{
+                        type: htmlKeyboardResponse,
+                        stimulus: stimHtml,
+                        choices: [" "],
+                        trial_duration: config.stimulusDuration,
+                        response_ends_trial: true,
+                        data: {
+                            task: 'oddball-trial', // Mark this so it gets saved to firebase
+                            trial_index: i,
+                            stimulus_index: stimIdx,
+                            letter: stim.letter,
+                            target_type: stim.type,
+                        },
+                        on_finish: (data: Record<string, unknown>) => {
+                            const pressedSpace = data.response !== null
+                            data.space_pressed = pressedSpace
+                            data.response_timestamp_ms = (data.rt as number | null) ?? null
+                            if (pressedSpace) {
+                                endCurrentTrial = true
+                            }
+                        },
+                    }],
+                    conditional_function: () => !endCurrentTrial,
                 })
 
-                // The 100ms blank gap
-                newTimeline.push({
-                    type: htmlKeyboardResponse,
-                    stimulus: '<div style="width: 100vw; height: 100vh; background: #000;"></div>',
-                    choices: [" "],
-                    trial_duration: BLANK_DURATION,
-                    response_ends_trial: false,
-                })
+                if (stimIdx < sequence.length - 1) {
+                    // The 100ms blank gap
+                    newTimeline.push({
+                        timeline: [{
+                            type: htmlKeyboardResponse,
+                            stimulus: '<div style="width: 100vw; height: 100vh; background: #000;"></div>',
+                            choices: [" "],
+                            trial_duration: BLANK_DURATION,
+                            response_ends_trial: true,
+                            data: {
+                                task: 'oddball-gap',
+                                trial_index: i,
+                                stimulus_index: stimIdx,
+                            },
+                            on_finish: (data: Record<string, unknown>) => {
+                                if (data.response !== null) {
+                                    endCurrentTrial = true
+                                }
+                            },
+                        }],
+                        conditional_function: () => !endCurrentTrial,
+                    })
+                }
             })
 
             // Inter-Trial Interval (blank black screen)
@@ -182,6 +214,21 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
         setPhase("running")
     }
 
+    // Allow spacebar to start as well
+    useEffect(() => {
+        if (phase !== "idle") return
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.repeat) return
+            if (e.code === "Space" || e.key === " ") {
+                e.preventDefault()
+                startTask()
+            }
+        }
+        window.addEventListener("keydown", handleKeyDown)
+        return () => window.removeEventListener("keydown", handleKeyDown)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [phase, config, participant])
+
     const handleFinish = useCallback(() => {
         setPhase("complete")
         if (onComplete) {
@@ -191,8 +238,6 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
         }
     }, [onComplete, router, sessionId])
 
-    const targetsNeeded = config.targetsToDetect || 2
-
     return (
         <div className="w-full h-screen bg-black text-white flex flex-col items-center justify-center overflow-hidden">
             {phase === "idle" && (
@@ -200,14 +245,15 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
                     <h2 className="text-3xl font-bold">Visual Oddball</h2>
                     <p className="text-gray-300 text-lg">A fixation cross appears every trial, then single letters are shown at the same center location</p>
                     <p className="text-gray-400">Target letter is <kbd className="px-2 py-1 bg-gray-700 rounded font-mono text-white">E</kbd></p>
-                    <p className="text-gray-400">Press <kbd className="px-2 py-1 bg-gray-700 rounded font-mono">Space</kbd> once, during the sequence, when you detect {targetsNeeded} targets</p>
-                    <p className="text-gray-500 text-sm">Trial ends 5 letters after the {targetsNeeded === 2 ? "2nd" : `${targetsNeeded}th`} E</p>
+                    <p className="text-gray-400">Press <kbd className="px-2 py-1 bg-gray-700 rounded font-mono">Space</kbd> during a trial to end it immediately.</p>
+                    <p className="text-gray-500 text-sm">If you do not press Space, each trial auto-ends after the 2nd E + 5 more letters.</p>
                     <button
                         onClick={startTask}
                         className="px-8 py-4 bg-white text-black rounded-lg text-xl font-semibold hover:bg-gray-200 transition-colors"
                     >
                         Start Test
                     </button>
+                    <p className="text-gray-500 text-sm">or press <kbd className="px-1.5 py-0.5 bg-gray-700 rounded font-mono text-xs">Space</kbd> to begin</p>
                 </div>
             )}
 

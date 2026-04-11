@@ -19,19 +19,12 @@ interface BottomUpRunProps {
     onComplete: () => void
 }
 
-const ALL_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")
-
-function getRandomLetter(): string {
-    return ALL_LETTERS[Math.floor(Math.random() * ALL_LETTERS.length)]
-}
-
 function generatePatches(config: BottomUpConfig): PatchItem[] {
     const totalCells = config.gridSize * config.gridSize
     const patches: PatchItem[] = []
 
     // Pick one random cell for the target
     const targetIndex = Math.floor(Math.random() * totalCells)
-    const targetLetter = getRandomLetter()
 
     for (let i = 0; i < totalCells; i++) {
         const row = Math.floor(i / config.gridSize)
@@ -43,16 +36,14 @@ function generatePatches(config: BottomUpConfig): PatchItem[] {
                 type: "target",
                 row,
                 col,
-                letter: targetLetter,
                 color: config.targetColor,
             })
         } else {
-            // Distractors — same letter style, white color
+            // Distractors use the same patch format in white
             patches.push({
                 type: "distractor",
                 row,
                 col,
-                letter: getRandomLetter(),
                 color: "#ffffff",
             })
         }
@@ -91,6 +82,7 @@ export function BottomUpRun({ config, participant, onComplete }: BottomUpRunProp
             const trialHtml = renderToString(
                 <ERPDisplay patches={patches} gridSize={config.gridSize} showHashes={true} />
             )
+            const wrappedStimulus = `<div style="width:100vw;height:100vh;background:#000;display:flex;align-items:center;justify-content:center;">${trialHtml}</div>`
 
             // Fixation cross before each trial
             newTimeline.push({
@@ -104,10 +96,10 @@ export function BottomUpRun({ config, participant, onComplete }: BottomUpRunProp
                 },
             })
 
-            // Stimulus — no hashes, just letters
+            // Stimulus grid
             newTimeline.push({
                 type: htmlKeyboardResponse,
-                stimulus: trialHtml,
+                stimulus: wrappedStimulus,
                 choices: [" "],
                 trial_duration: config.maxTrialTime,
                 data: {
