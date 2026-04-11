@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { dataService } from "@/lib/data-service"
 import { trackingService } from "@/lib/tracking-service"
@@ -34,7 +34,7 @@ function getRandomNonTargetLetter(): string {
 function generateStimulusSequence(config: OddballConfig): { letter: string; type: PatchType }[] {
     const sequence: { letter: string; type: PatchType }[] = []
     const targetProb = config.targetProbability / 100
-    const targetsNeeded = config.targetsToDetect || 2
+    const targetsNeeded = Math.max(config.targetsToDetect || 2, 2)
     let targetsSeen = 0
     let lettersAfterLastNeededTarget = -1 // -1 means we haven't hit target N yet
     let lastWasTarget = false
@@ -67,6 +67,30 @@ function generateStimulusSequence(config: OddballConfig): { letter: string; type
                 lettersAfterLastNeededTarget++
             }
         }
+    }
+
+    let targetCount = sequence.filter((item) => item.type === "target").length
+
+    while (targetCount < 2) {
+        const nonAdjacentCandidates: number[] = []
+        const fallbackCandidates: number[] = []
+
+        sequence.forEach((item, idx) => {
+            if (item.type === "target") return
+            fallbackCandidates.push(idx)
+            const prevIsTarget = idx > 0 && sequence[idx - 1].type === "target"
+            const nextIsTarget = idx < sequence.length - 1 && sequence[idx + 1].type === "target"
+            if (!prevIsTarget && !nextIsTarget) {
+                nonAdjacentCandidates.push(idx)
+            }
+        })
+
+        const pool = nonAdjacentCandidates.length > 0 ? nonAdjacentCandidates : fallbackCandidates
+        if (pool.length === 0) break
+
+        const selectedIndex = pool[Math.floor(Math.random() * pool.length)]
+        sequence[selectedIndex] = { letter: "E", type: "target" }
+        targetCount++
     }
 
     return sequence
@@ -109,6 +133,7 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
 
         for (let i = 0; i < config.numberOfTrials; i++) {
             const sequence = generateStimulusSequence(config)
+            let trialEndedBySpace = false
 
             // Fixation cross before every trial
             newTimeline.push({
@@ -134,31 +159,46 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
                 `
                 // The letter stimulus
                 newTimeline.push({
-                    type: htmlKeyboardResponse,
-                    stimulus: stimHtml,
-                    choices: [" "],
-                    trial_duration: config.stimulusDuration,
-                    response_ends_trial: false, // Don't end trial early if they press space
-                    data: {
-                        task: 'oddball-trial', // Mark this so it gets saved to firebase
-                        trial_index: i,
-                        stimulus_index: stimIdx,
-                        letter: stim.letter,
-                        target_type: stim.type,
-                    },
-                    on_finish: (data: Record<string, unknown>) => {
-                        data.space_pressed = data.response !== null
-                        data.response_timestamp_ms = (data.rt as number | null) ?? null
-                    },
+                    timeline: [{
+                        type: htmlKeyboardResponse,
+                        stimulus: stimHtml,
+                        choices: [" "],
+                        trial_duration: config.stimulusDuration,
+                        response_ends_trial: true,
+                        data: {
+                            task: 'oddball-trial', // Mark this so it gets saved to firebase
+                            trial_index: i,
+                            stimulus_index: stimIdx,
+                            letter: stim.letter,
+                            target_type: stim.type,
+                        },
+                        on_finish: (data: Record<string, unknown>) => {
+                            const pressedSpace = data.response !== null
+                            data.space_pressed = pressedSpace
+                            data.response_timestamp_ms = (data.rt as number | null) ?? null
+                            if (pressedSpace) {
+                                trialEndedBySpace = true
+                            }
+                        },
+                    }],
+                    conditional_function: () => !trialEndedBySpace,
                 })
 
                 // The 100ms blank gap
                 newTimeline.push({
-                    type: htmlKeyboardResponse,
-                    stimulus: '<div style="width: 100vw; height: 100vh; background: #000;"></div>',
-                    choices: [" "],
-                    trial_duration: BLANK_DURATION,
-                    response_ends_trial: false,
+                    timeline: [{
+                        type: htmlKeyboardResponse,
+                        stimulus: '<div style="width: 100vw; height: 100vh; background: #000;"></div>',
+                        choices: [" "],
+                        trial_duration: BLANK_DURATION,
+                        response_ends_trial: true,
+                        on_finish: (data: Record<string, unknown>) => {
+                            if (data.response !== null) {
+                                trialEndedBySpace = true
+                            }
+                        },
+                    }],
+                    conditional_function: () => !trialEndedBySpace,
                 })
             })
 
@@ -182,6 +222,19 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
         setPhase("running")
     }
 
+    useEffect(() => {
+        if (phase !== "idle") return
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.code === "Space" || e.key === " ") {
+                e.preventDefault()
+                startTask()
+            }
+        }
+        window.addEventListener("keydown", handleKeyDown)
+        return () => window.removeEventListener("keydown", handleKeyDown)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [phase])
+
     const handleFinish = useCallback(() => {
         setPhase("complete")
         if (onComplete) {
@@ -191,7 +244,7 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
         }
     }, [onComplete, router, sessionId])
 
-    const targetsNeeded = config.targetsToDetect || 2
+    const targetsNeeded = Math.max(config.targetsToDetect || 2, 2)
 
     return (
         <div className="w-full h-screen bg-black text-white flex flex-col items-center justify-center overflow-hidden">
@@ -200,14 +253,15 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
                     <h2 className="text-3xl font-bold">Visual Oddball</h2>
                     <p className="text-gray-300 text-lg">A fixation cross appears every trial, then single letters are shown at the same center location</p>
                     <p className="text-gray-400">Target letter is <kbd className="px-2 py-1 bg-gray-700 rounded font-mono text-white">E</kbd></p>
-                    <p className="text-gray-400">Press <kbd className="px-2 py-1 bg-gray-700 rounded font-mono">Space</kbd> once, during the sequence, when you detect {targetsNeeded} targets</p>
-                    <p className="text-gray-500 text-sm">Trial ends 5 letters after the {targetsNeeded === 2 ? "2nd" : `${targetsNeeded}th`} E</p>
+                    <p className="text-gray-400">Each trial contains at least 2 target letters (<kbd className="px-1.5 py-0.5 bg-gray-700 rounded font-mono text-xs">E</kbd>)</p>
+                    <p className="text-gray-400">Press <kbd className="px-2 py-1 bg-gray-700 rounded font-mono">Space</kbd> when you detect {targetsNeeded} targets — the trial ends immediately</p>
                     <button
                         onClick={startTask}
                         className="px-8 py-4 bg-white text-black rounded-lg text-xl font-semibold hover:bg-gray-200 transition-colors"
                     >
                         Start Test
                     </button>
+                    <p className="text-gray-500 text-sm">or press <kbd className="px-1.5 py-0.5 bg-gray-700 rounded font-mono text-xs">Space</kbd> to begin</p>
                 </div>
             )}
 
