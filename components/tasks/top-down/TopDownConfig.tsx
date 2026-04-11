@@ -52,7 +52,7 @@ export function TopDownConfigComponent({ onConfigComplete }: TopDownConfigProps)
                     {/* Grid & Display */}
                     <div>
                         <h4 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Grid &amp; Display</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label>Grid Size (N×N)</Label>
                                 <Input
@@ -73,40 +73,21 @@ export function TopDownConfigComponent({ onConfigComplete }: TopDownConfigProps)
                                     onChange={(e) => handleChange("fillPercentage", e.target.value)}
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label>Patch Size (cm)</Label>
-                                <Input
-                                    type="number"
-                                    min="0.3"
-                                    max="3"
-                                    step="0.1"
-                                    value={config.patchSizeCm}
-                                    onChange={(e) => handleChange("patchSizeCm", e.target.value)}
-                                />
-                            </div>
                         </div>
                     </div>
 
                     {/* Targets */}
                     <div>
                         <h4 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Targets</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-                            <div className="space-y-2">
-                                <Label>Targets per Slide</Label>
-                                <Input
-                                    type="number"
-                                    value={2}
-                                    disabled
-                                />
-                                <p className="text-xs text-muted-foreground">Fixed at exactly 2 E targets per slide (rest are Ǝ distractors)</p>
-                            </div>
+                        <div className="space-y-2">
+                            <p className="text-sm text-muted-foreground">Targets per slide is fixed at exactly <strong className="text-foreground">2 E</strong> (rest are Ǝ distractors).</p>
                         </div>
                     </div>
 
                     {/* Timing */}
                     <div>
                         <h4 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Timing</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label>Number of Trials</Label>
                                 <Input
@@ -128,42 +109,7 @@ export function TopDownConfigComponent({ onConfigComplete }: TopDownConfigProps)
                                     onChange={(e) => handleChange("maxTrialTime", e.target.value)}
                                 />
                             </div>
-                            {/* <div className="space-y-2">
-                                <Label>Fixation Duration (ms)</Label>
-                                <Input
-                                    type="number"
-                                    min="100"
-                                    max="5000"
-                                    step="100"
-                                    value={config.fixationDuration}
-                                    onChange={(e) => handleChange("fixationDuration", e.target.value)}
-                                />
-                            </div> */}
                         </div>
-                        {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                            <div className="space-y-2">
-                                <Label>Inter-Trial Interval (ms)</Label>
-                                <Input
-                                    type="number"
-                                    min="100"
-                                    max="5000"
-                                    step="100"
-                                    value={config.interTrialInterval}
-                                    onChange={(e) => handleChange("interTrialInterval", e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Stimulus Duration (ms)</Label>
-                                <Input
-                                    type="number"
-                                    min="100"
-                                    max="10000"
-                                    step="100"
-                                    value={config.stimulusDuration}
-                                    onChange={(e) => handleChange("stimulusDuration", e.target.value)}
-                                />
-                            </div>
-                        </div> */}
                     </div>
 
                     {/* Summary */}
@@ -180,10 +126,6 @@ export function TopDownConfigComponent({ onConfigComplete }: TopDownConfigProps)
                             <div>
                                 <p className="text-muted-foreground">Fill</p>
                                 <p className="font-medium">{config.fillPercentage}%</p>
-                            </div>
-                            <div>
-                                <p className="text-muted-foreground">Patch Size</p>
-                                <p className="font-medium">{config.patchSizeCm} cm</p>
                             </div>
                             <div>
                                 <p className="text-muted-foreground">Trials</p>

@@ -60,16 +60,10 @@ function generateTopDownPatches(config: TopDownConfig): PatchItem[] {
     return patches
 }
 
-const ALL_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")
-function getRandomLetter(): string {
-    return ALL_LETTERS[Math.floor(Math.random() * ALL_LETTERS.length)]
-}
-
 function generateBottomUpPatches(config: TopDownConfig): PatchItem[] {
     const totalCells = config.gridSize * config.gridSize
     const patches: PatchItem[] = []
-
-    const fillCount = Math.round((config.fillPercentage / 100) * totalCells)
+    const fillCount = Math.max(1, Math.round((config.fillPercentage / 100) * totalCells))
     const allIndices = Array.from({ length: totalCells }, (_, i) => i)
 
     // Shuffle indices
@@ -77,27 +71,20 @@ function generateBottomUpPatches(config: TopDownConfig): PatchItem[] {
         const j = Math.floor(Math.random() * (i + 1))
             ;[allIndices[i], allIndices[j]] = [allIndices[j], allIndices[i]]
     }
-    const filledIndices = allIndices.slice(0, fillCount)
 
-    // Bottom up has exactly 1 target, rest are distractors
-    const targetCount = 1
+    const filledIndices = allIndices.slice(0, fillCount)
+    const targetPatchIndex = Math.floor(Math.random() * filledIndices.length)
 
     filledIndices.forEach((cellIndex, idx) => {
         const row = Math.floor(cellIndex / config.gridSize)
         const col = cellIndex % config.gridSize
 
-        if (idx < targetCount) {
+        if (idx === targetPatchIndex) {
             patches.push({ type: "target", row, col, color: BOTTOM_UP_COLOR })
         } else {
-            patches.push({ type: "distractor", row, col })
+            patches.push({ type: "distractor", row, col, color: "#ffffff" })
         }
     })
-
-    // Shuffle patches so target isn't always first in grid
-    for (let i = patches.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1))
-            ;[patches[i], patches[j]] = [patches[j], patches[i]]
-    }
 
     return patches
 }
@@ -151,7 +138,6 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
                 <ERPDisplay
                     patches={patches}
                     gridSize={config.gridSize}
-                    patchSizeCm={config.patchSizeCm}
                     showHashes={true}
                 />
             )
@@ -235,7 +221,7 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
                     <h2 className="text-3xl font-bold">Top Down Conjunction Search</h2>
                     <p className="text-gray-300 text-lg">Find targets (<span className="font-mono">E</span>) among distractors (<span className="font-mono">Ǝ</span>) in the grid</p>
                     <p className="text-gray-400">Each slide has exactly {TARGETS_PER_SLIDE} targets, and both targets and distractors are shown as # patches</p>
-                    <p className="text-gray-400">Some trials will have a <strong style={{ color: BOTTOM_UP_COLOR }}>colored singleton</strong> — find it!</p>
+                    <p className="text-gray-400">Some trials will have one <strong style={{ color: BOTTOM_UP_COLOR }}>red target patch</strong> — find it!</p>
                     <p className="text-gray-400">Press <kbd className="px-2 py-1 bg-gray-700 rounded font-mono">Space</kbd> once after finding the target(s)</p>
                     <button
                         onClick={startTask}

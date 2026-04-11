@@ -63,8 +63,8 @@ export function BottomUpConfigComponent({ onConfigComplete }: BottomUpConfigProp
                                         type="button"
                                         onClick={() => handleChange("targetColor", opt.value)}
                                         className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition-all ${config.targetColor === opt.value
-                                                ? "border-white bg-white/10 shadow-lg"
-                                                : "border-transparent bg-muted/50 hover:bg-muted"
+                                            ? "border-white bg-white/10 shadow-lg"
+                                            : "border-transparent bg-muted/50 hover:bg-muted"
                                             }`}
                                     >
                                         <div
@@ -152,17 +152,6 @@ export function BottomUpConfigComponent({ onConfigComplete }: BottomUpConfigProp
                                     step="100"
                                     value={config.interTrialInterval}
                                     onChange={(e) => handleChange("interTrialInterval", e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Stimulus Duration (ms)</Label>
-                                <Input
-                                    type="number"
-                                    min="100"
-                                    max="10000"
-                                    step="100"
-                                    value={config.stimulusDuration}
-                                    onChange={(e) => handleChange("stimulusDuration", e.target.value)}
                                 />
                             </div>
                         </div>
