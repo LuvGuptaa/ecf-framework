@@ -84,7 +84,7 @@ export function BottomUpRun({ config, participant, onComplete }: BottomUpRunProp
                 trackingService.startFrameRateMonitoring()
             }
         })
-
+        // WEB SERIAL API: BOTTOM UP TIMELINE
         for (let i = 0; i < config.numberOfTrials; i++) {
             const patches = generatePatches(config)
 
