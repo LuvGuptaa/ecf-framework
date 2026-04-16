@@ -1,6 +1,12 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { trackingService } from "@/lib/tracking-service"
+
+const SERIAL_EVENT_IDS = {
+    blackScreen: 200,
+    whiteScreen: 201,
+} as const
 
 interface CalibrationScreenProps {
     /** Duration in ms */
@@ -39,6 +45,11 @@ export function CalibrationScreen({
             clearTimeout(timeout)
         }
     }, [duration, interval, onComplete])
+
+    useEffect(() => {
+        const markerId = isWhite ? SERIAL_EVENT_IDS.whiteScreen : SERIAL_EVENT_IDS.blackScreen
+        void trackingService.sendSerialEvent(markerId)
+    }, [isWhite])
 
     return (
         <div

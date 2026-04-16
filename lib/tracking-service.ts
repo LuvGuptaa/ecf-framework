@@ -33,9 +33,23 @@ export interface TimingMeasurement {
   frameRate?: number
 }
 
+interface MinimalSerialPort {
+  open(options: { baudRate: number }): Promise<void>
+  close(): Promise<void>
+  writable: WritableStream<Uint8Array> | null
+}
+
+interface NavigatorWithSerial extends Navigator {
+  serial?: {
+    requestPort(): Promise<MinimalSerialPort>
+  }
+}
+
 export class TrackingService {
   private frameRateMonitor: number[] = []
   private lastFrameTime = 0
+  private serialPort: MinimalSerialPort | null = null
+  private serialWriter: WritableStreamDefaultWriter<Uint8Array> | null = null
 
   // Enhanced coordinate tracking with multiple coordinate systems
   captureDetailedCoordinates(
@@ -179,6 +193,78 @@ export class TrackingService {
 
   stopFrameRateMonitoring(): void {
     this.frameRateMonitor = []
+  }
+
+  isWebSerialSupported(): boolean {
+    if (typeof navigator === "undefined") return false
+    return "serial" in navigator
+  }
+
+  isSerialConnected(): boolean {
+    return this.serialWriter !== null
+  }
+
+  async connectSerial(baudRate = 9600): Promise<void> {
+    if (!this.isWebSerialSupported()) {
+      throw new Error("Web Serial API is not supported in this browser.")
+    }
+
+    if (this.serialWriter || this.serialPort) {
+      await this.disconnectSerial()
+    }
+
+    const serialNavigator = navigator as NavigatorWithSerial
+    if (!serialNavigator.serial) {
+      throw new Error("Web Serial API is unavailable.")
+    }
+
+    const port = await serialNavigator.serial.requestPort()
+    await port.open({ baudRate })
+
+    if (!port.writable) {
+      await port.close()
+      throw new Error("Selected serial port is not writable.")
+    }
+
+    this.serialPort = port
+    this.serialWriter = port.writable.getWriter()
+  }
+
+  async sendSerialEvent(id: number | string, timestamp: number = Date.now()): Promise<boolean> {
+    if (!this.serialWriter) {
+      return false
+    }
+
+    try {
+      const encoder = new TextEncoder()
+      const message = `${id},${timestamp}\n`
+      await this.serialWriter.write(encoder.encode(message))
+      console.log("[Serial] Sent:", message.trim())
+      return true
+    } catch (error) {
+      console.error("[Serial] Failed to send:", error)
+      return false
+    }
+  }
+
+  async disconnectSerial(): Promise<void> {
+    if (this.serialWriter) {
+      try {
+        this.serialWriter.releaseLock()
+      } catch {
+        // Ignore lock-release errors while cleaning up the writer.
+      }
+      this.serialWriter = null
+    }
+
+    if (this.serialPort) {
+      try {
+        await this.serialPort.close()
+      } catch {
+        // Ignore port-close errors when disconnecting.
+      }
+      this.serialPort = null
+    }
   }
 
   // Device and environment information

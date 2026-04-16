@@ -16,6 +16,18 @@ const TARGETS_PER_SLIDE = 2
 /** Fraction of trials that are bottom-up singletons (0–1). */
 const BOTTOM_UP_RATIO = 0.2
 const BOTTOM_UP_COLOR = "#ff0000"
+const SERIAL_EVENT_IDS = {
+    experimentStart: 100,
+    experimentEnd: 101,
+    blackScreen: 200,
+    fixationCross: 210,
+    topDownStart: 300,
+    topDownFixation: 301,
+    topDownStimulus: 302,
+    topDownCombinedStimulus: 303,
+    topDownTrialEnd: 304,
+    spaceKeyPressed: 500,
+} as const
 
 interface TopDownRunProps {
     config: TopDownConfig
@@ -102,6 +114,9 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
     }, [])
 
     const startTask = async () => {
+        await trackingService.sendSerialEvent(SERIAL_EVENT_IDS.experimentStart)
+        await trackingService.sendSerialEvent(SERIAL_EVENT_IDS.topDownStart)
+
         const [
             { default: htmlKeyboardResponse },
             { default: callFunctionPlugin }
@@ -127,7 +142,7 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
                 trackingService.startFrameRateMonitoring()
             }
         })
-
+        // WEB SERIAL API: TOP DOWN TIMELINE
         for (let i = 0; i < config.numberOfTrials; i++) {
             const isBottomUp = Math.random() < BOTTOM_UP_RATIO
             const patches = isBottomUp
@@ -154,6 +169,7 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
                 data: {
                     task: isBottomUp ? 'bottom-up-fixation' : 'top-down-fixation',
                     trial_index: i,
+                    serialEventIds: [SERIAL_EVENT_IDS.fixationCross, SERIAL_EVENT_IDS.topDownFixation],
                 },
             })
 
@@ -168,6 +184,8 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
                     trial_index: i,
                     targetCount: isBottomUp ? 1 : TARGETS_PER_SLIDE,
                     isBottomUp,
+                    serialEventId: isBottomUp ? SERIAL_EVENT_IDS.topDownCombinedStimulus : SERIAL_EVENT_IDS.topDownStimulus,
+                    serialEventIdOnFinish: SERIAL_EVENT_IDS.topDownTrialEnd,
                 },
             })
 
@@ -177,6 +195,11 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
                 stimulus: '<div style="width: 100vw; height: 100vh; background: black;"></div>',
                 choices: "NO_KEYS",
                 trial_duration: config.interTrialInterval,
+                data: {
+                    task: isBottomUp ? 'bottom-up-iti' : 'top-down-iti',
+                    trial_index: i,
+                    serialEventId: SERIAL_EVENT_IDS.blackScreen,
+                },
             })
         }
 
@@ -197,6 +220,7 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.code === "Space" || e.key === " ") {
                 e.preventDefault()
+                void trackingService.sendSerialEvent(SERIAL_EVENT_IDS.spaceKeyPressed)
                 startTask()
             }
         }
@@ -206,6 +230,7 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
     }, [phase, config, participant])
 
     const handleFinish = useCallback(() => {
+        void trackingService.sendSerialEvent(SERIAL_EVENT_IDS.experimentEnd)
         setPhase("complete")
         if (onComplete) {
             onComplete()
