@@ -127,7 +127,7 @@ export function TopDownRun({ config, participant, onComplete }: TopDownRunProps)
                 trackingService.startFrameRateMonitoring()
             }
         })
-
+        // WEB SERIAL API: TOP DOWN TIMELINE
         for (let i = 0; i < config.numberOfTrials; i++) {
             const isBottomUp = Math.random() < BOTTOM_UP_RATIO
             const patches = isBottomUp

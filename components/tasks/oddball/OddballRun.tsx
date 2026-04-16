@@ -115,7 +115,7 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
         })
 
         const BLANK_DURATION = 100
-
+        // WEB SERIAL API: ODDBALL TIMELINE
         for (let i = 0; i < config.numberOfTrials; i++) {
             const sequence = generateStimulusSequence(config)
             let endCurrentTrial = false
