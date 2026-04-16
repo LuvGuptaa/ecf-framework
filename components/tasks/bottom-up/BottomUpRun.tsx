@@ -13,6 +13,13 @@ import type { BottomUpConfig, PatchItem } from "@/lib/types"
 import htmlKeyboardResponse from "@jspsych/plugin-html-keyboard-response"
 import callFunctionPlugin from "@jspsych/plugin-call-function"
 
+const SERIAL_EVENT_IDS = {
+    experimentStart: 100,
+    experimentEnd: 101,
+    blackScreen: 200,
+    fixationCross: 210,
+} as const
+
 interface BottomUpRunProps {
     config: BottomUpConfig
     participant: { id: string; name: string; age: number; email?: string; notes?: string }
@@ -58,6 +65,8 @@ export function BottomUpRun({ config, participant, onComplete }: BottomUpRunProp
     const [timeline, setTimeline] = useState<Record<string, unknown>[]>([])
 
     const startTask = async () => {
+        await trackingService.sendSerialEvent(SERIAL_EVENT_IDS.experimentStart)
+
         const { id } = await dataService.createERPSession({
             participantId: participant.id,
             participantName: participant.name,
@@ -93,6 +102,7 @@ export function BottomUpRun({ config, participant, onComplete }: BottomUpRunProp
                 data: {
                     task: 'bottom-up-fixation',
                     trial_index: i,
+                    serialEventId: SERIAL_EVENT_IDS.fixationCross,
                 },
             })
 
@@ -115,6 +125,11 @@ export function BottomUpRun({ config, participant, onComplete }: BottomUpRunProp
                 stimulus: '<div style="width: 100vw; height: 100vh; background: black; display: flex; align-items: center; justify-content: center;"><div style="width: 48px; height: 48px; border: 4px solid rgba(255,255,255,0.2); border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite;"></div></div>',
                 choices: "NO_KEYS",
                 trial_duration: config.interTrialInterval,
+                data: {
+                    task: 'bottom-up-iti',
+                    trial_index: i,
+                    serialEventId: SERIAL_EVENT_IDS.blackScreen,
+                },
             })
         }
 
@@ -130,6 +145,7 @@ export function BottomUpRun({ config, participant, onComplete }: BottomUpRunProp
     }
 
     const handleFinish = useCallback(() => {
+        void trackingService.sendSerialEvent(SERIAL_EVENT_IDS.experimentEnd)
         setPhase("complete")
         if (onComplete) {
             onComplete()

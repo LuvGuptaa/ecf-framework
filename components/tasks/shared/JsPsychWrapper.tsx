@@ -3,6 +3,7 @@
 import { useRef, useEffect } from "react"
 
 import { dataService } from "@/lib/data-service"
+import { trackingService } from "@/lib/tracking-service"
 
 interface JsPsychWrapperProps {
     timeline: Record<string, unknown>[]
@@ -35,8 +36,36 @@ export function JsPsychWrapper({
 
             if (isCancelled) return
 
+            const sendSerialMarkers = (value: unknown) => {
+                if (typeof value === "number" || typeof value === "string") {
+                    void trackingService.sendSerialEvent(value)
+                    return
+                }
+
+                if (Array.isArray(value)) {
+                    for (const id of value) {
+                        if (typeof id === "number" || typeof id === "string") {
+                            void trackingService.sendSerialEvent(id)
+                        }
+                    }
+                }
+            }
+
             innerJsPsych = initJsPsych({
                 display_element: containerRef.current!,
+                on_trial_start: (trial: Record<string, unknown>) => {
+                    const trialData = (trial.data as Record<string, unknown> | undefined) ?? undefined
+                    sendSerialMarkers(trialData?.serialEventId)
+                    sendSerialMarkers(trialData?.serialEventIds)
+                },
+                on_trial_finish: (trialData: Record<string, unknown>) => {
+                    if (trialData.response !== null && trialData.response !== undefined) {
+                        void trackingService.sendSerialEvent(500)
+                    }
+
+                    sendSerialMarkers(trialData.serialEventIdOnFinish)
+                    sendSerialMarkers(trialData.serialEventIdsOnFinish)
+                },
                 on_finish: async () => {
                     const trials = innerJsPsych.data.get().values()
 

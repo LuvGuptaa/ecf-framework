@@ -7,11 +7,14 @@ import { useTestStore } from "@/lib/stores/test-store"
 import { useERPStore } from "@/lib/stores/erp-store"
 import { CalibrationScreen } from "@/components/tasks/shared/CalibrationScreen"
 import { RecordingService, downloadRecordingsAsZip } from "@/lib/recording-service"
+import { trackingService } from "@/lib/tracking-service"
 import { Video, Monitor } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 type RunPhase = "permission" | "pre-calibration" | "task" | "post-calibration" | "saving" | "done"
 type PermissionStep = "initial" | "screen-requested" | "screen-granted" | "camera-requested"
+
+const SERIAL_TEST_ID = 999
 
 export default function TaskRunPage({ params }: { params: { taskId: string } }) {
   const router = useRouter()
@@ -25,6 +28,10 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
   const [phase, setPhase] = useState<RunPhase>("permission")
   const [permissionStep, setPermissionStep] = useState<PermissionStep>("initial")
   const [permissionError, setPermissionError] = useState<string | null>(null)
+  const [serialSupported, setSerialSupported] = useState(false)
+  const [serialConnected, setSerialConnected] = useState(false)
+  const [serialBusy, setSerialBusy] = useState(false)
+  const [serialStatus, setSerialStatus] = useState("Web Serial is disconnected.")
 
   const cameraRecordingServiceRef = useRef<RecordingService | null>(null)
   const screenRecordingServiceRef = useRef<RecordingService | null>(null)
@@ -32,6 +39,17 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
   useEffect(() => {
     useERPStore.getState().resetSessionState()
     useTestStore.getState().resetSessionState()
+  }, [])
+
+  useEffect(() => {
+    setSerialSupported(trackingService.isWebSerialSupported())
+    setSerialConnected(trackingService.isSerialConnected())
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      void trackingService.disconnectSerial()
+    }
   }, [])
 
   useEffect(() => {
@@ -43,6 +61,48 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
       router.push(`/${taskId}`)
     }
   }, [task, participant, taskId, router])
+
+  const handleConnectSerial = useCallback(async () => {
+    setSerialBusy(true)
+    setSerialStatus("Connecting to serial device...")
+
+    try {
+      await trackingService.connectSerial(9600)
+      setSerialConnected(true)
+
+      const sent = await trackingService.sendSerialEvent(SERIAL_TEST_ID)
+      if (sent) {
+        setSerialStatus(`Connected. Sent test packet ${SERIAL_TEST_ID},<timestamp>.`)
+      } else {
+        setSerialStatus("Connected, but the first test packet was not sent.")
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not connect to serial device."
+      setSerialConnected(false)
+      setSerialStatus(message)
+    } finally {
+      setSerialBusy(false)
+    }
+  }, [])
+
+  const handleDisconnectSerial = useCallback(async () => {
+    setSerialBusy(true)
+    await trackingService.disconnectSerial()
+    setSerialConnected(false)
+    setSerialStatus("Serial disconnected.")
+    setSerialBusy(false)
+  }, [])
+
+  const handleSendSerialTest = useCallback(async () => {
+    setSerialBusy(true)
+    const sent = await trackingService.sendSerialEvent(SERIAL_TEST_ID)
+    if (sent) {
+      setSerialStatus(`Sent test packet ${SERIAL_TEST_ID},<timestamp>.`)
+    } else {
+      setSerialStatus("Serial writer is not connected.")
+    }
+    setSerialBusy(false)
+  }, [])
 
   const requestScreenAccess = useCallback(async () => {
     setPermissionError(null)
@@ -61,7 +121,7 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
       const screenRecorder = new RecordingService()
       screenRecordingServiceRef.current = screenRecorder
       await screenRecorder.startStreamRecording(screenStream)
-      
+
       setPermissionStep("screen-granted")
     } catch (err: unknown) {
       setPermissionStep("initial")
@@ -85,7 +145,7 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
       const camRecorder = new RecordingService()
       cameraRecordingServiceRef.current = camRecorder
       await camRecorder.startStreamRecording(cameraStream)
-      
+
       setPhase("pre-calibration")
     } catch (err: unknown) {
       setPermissionStep("screen-granted")
@@ -154,7 +214,7 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
             <Monitor className="h-8 w-8 text-white" />
             <Video className="h-8 w-8 text-white" />
           </div>
-          
+
           <div className="space-y-3">
             <h2 className="text-2xl font-bold text-white">Permissions Required</h2>
             <p className="text-gray-400 text-sm leading-relaxed">
@@ -195,6 +255,51 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
               >
                 {permissionStep === "camera-requested" ? "Waiting for Camera..." : "2. Allow Camera Access"}
               </Button>
+            )}
+          </div>
+
+          <div className="rounded-lg border border-white/20 bg-white/5 p-4 text-left space-y-3">
+            <p className="text-sm font-semibold text-white">Optional: Web Serial Test</p>
+            <p className="text-xs text-gray-400">Packet format: id,timestamp followed by a newline.</p>
+
+            {!serialSupported && (
+              <p className="text-xs text-yellow-300">
+                Web Serial is not supported in this browser. Use a Chromium-based browser over HTTPS or localhost.
+              </p>
+            )}
+
+            {serialSupported && (
+              <>
+                <div className="flex flex-col gap-2">
+                  {!serialConnected ? (
+                    <Button
+                      onClick={handleConnectSerial}
+                      disabled={serialBusy}
+                      className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                    >
+                      {serialBusy ? "Connecting Serial..." : "Connect Serial (9600)"}
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={handleDisconnectSerial}
+                      disabled={serialBusy}
+                      className="w-full h-11 bg-zinc-700 hover:bg-zinc-600 text-white font-semibold"
+                    >
+                      Disconnect Serial
+                    </Button>
+                  )}
+
+                  <Button
+                    onClick={handleSendSerialTest}
+                    disabled={!serialConnected || serialBusy}
+                    className="w-full h-11 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+                  >
+                    Send Test Packet ({SERIAL_TEST_ID})
+                  </Button>
+                </div>
+
+                <p className="text-xs text-gray-300">{serialStatus}</p>
+              </>
             )}
           </div>
         </div>

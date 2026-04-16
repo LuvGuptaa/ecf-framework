@@ -19,6 +19,25 @@ interface OddballRunProps {
 const NON_TARGET_LETTERS = "ABCDFGHIJKLMNOPQRSTUVWXYZ".split("") // excludes E
 const REQUIRED_TARGETS = 2
 const LETTERS_AFTER_SECOND_TARGET = 5
+const SERIAL_EVENT_IDS = {
+    experimentStart: 100,
+    experimentEnd: 101,
+    blackScreen: 200,
+    fixationCross: 210,
+    visualOddballStart: 400,
+    visualOddballFixation: 401,
+    visualOddballStandard: 402,
+    visualOddballTarget: 403,
+    visualOddballTrialEnd: 404,
+    spaceKeyPressed: 500,
+} as const
+
+function getLetterMarkerId(letter: string): number | null {
+    const normalized = letter.toUpperCase()
+    const code = normalized.charCodeAt(0)
+    if (code < 65 || code > 90) return null
+    return 420 + (code - 65)
+}
 
 function getRandomNonTargetLetter(): string {
     return NON_TARGET_LETTERS[Math.floor(Math.random() * NON_TARGET_LETTERS.length)]
@@ -88,6 +107,9 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
     const startTask = async () => {
         if (phase !== "idle") return
 
+        await trackingService.sendSerialEvent(SERIAL_EVENT_IDS.experimentStart)
+        await trackingService.sendSerialEvent(SERIAL_EVENT_IDS.visualOddballStart)
+
         const [
             { default: htmlKeyboardResponse },
             { default: callFunctionPlugin }
@@ -129,6 +151,7 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
                 data: {
                     task: 'oddball-fixation',
                     trial_index: i,
+                    serialEventIds: [SERIAL_EVENT_IDS.fixationCross, SERIAL_EVENT_IDS.visualOddballFixation],
                 },
             })
 
@@ -142,6 +165,14 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
                         </div>
                     </div>
                 `
+                const letterMarkerId = getLetterMarkerId(stim.letter)
+                const stimulusSerialIds: number[] = [
+                    stim.type === "target" ? SERIAL_EVENT_IDS.visualOddballTarget : SERIAL_EVENT_IDS.visualOddballStandard,
+                ]
+                if (letterMarkerId !== null) {
+                    stimulusSerialIds.push(letterMarkerId)
+                }
+
                 // The letter stimulus
                 newTimeline.push({
                     timeline: [{
@@ -156,6 +187,7 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
                             stimulus_index: stimIdx,
                             letter: stim.letter,
                             target_type: stim.type,
+                            serialEventIds: stimulusSerialIds,
                         },
                         on_finish: (data: Record<string, unknown>) => {
                             const pressedSpace = data.response !== null
@@ -182,6 +214,7 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
                                 task: 'oddball-gap',
                                 trial_index: i,
                                 stimulus_index: stimIdx,
+                                serialEventId: SERIAL_EVENT_IDS.blackScreen,
                             },
                             on_finish: (data: Record<string, unknown>) => {
                                 if (data.response !== null) {
@@ -200,6 +233,11 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
                 stimulus: '<div style="width: 100vw; height: 100vh; background: black;"></div>',
                 choices: "NO_KEYS",
                 trial_duration: config.interTrialInterval,
+                data: {
+                    task: 'oddball-iti',
+                    trial_index: i,
+                    serialEventIds: [SERIAL_EVENT_IDS.visualOddballTrialEnd, SERIAL_EVENT_IDS.blackScreen],
+                },
             })
         }
 
@@ -221,6 +259,7 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
             if (e.repeat) return
             if (e.code === "Space" || e.key === " ") {
                 e.preventDefault()
+                void trackingService.sendSerialEvent(SERIAL_EVENT_IDS.spaceKeyPressed)
                 startTask()
             }
         }
@@ -230,6 +269,7 @@ export function OddballRun({ config, participant, onComplete }: OddballRunProps)
     }, [phase, config, participant])
 
     const handleFinish = useCallback(() => {
+        void trackingService.sendSerialEvent(SERIAL_EVENT_IDS.experimentEnd)
         setPhase("complete")
         if (onComplete) {
             onComplete()
