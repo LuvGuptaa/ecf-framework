@@ -50,6 +50,7 @@ export class TrackingService {
   private lastFrameTime = 0
   private serialPort: MinimalSerialPort | null = null
   private serialWriter: WritableStreamDefaultWriter<Uint8Array> | null = null
+  private serialEventEmissionEnabled = true
 
   // Enhanced coordinate tracking with multiple coordinate systems
   captureDetailedCoordinates(
@@ -204,6 +205,14 @@ export class TrackingService {
     return this.serialWriter !== null
   }
 
+  setSerialEventEmissionEnabled(enabled: boolean): void {
+    this.serialEventEmissionEnabled = enabled
+  }
+
+  isSerialEventEmissionEnabled(): boolean {
+    return this.serialEventEmissionEnabled
+  }
+
   async connectSerial(baudRate = 9600): Promise<void> {
     if (!this.isWebSerialSupported()) {
       throw new Error("Web Serial API is not supported in this browser.")
@@ -230,7 +239,15 @@ export class TrackingService {
     this.serialWriter = port.writable.getWriter()
   }
 
-  async sendSerialEvent(id: number | string, timestamp: number = Date.now()): Promise<boolean> {
+  async sendSerialEvent(
+    id: number | string,
+    timestamp: number = Date.now(),
+    options?: { bypassEmissionGate?: boolean },
+  ): Promise<boolean> {
+    if (!options?.bypassEmissionGate && !this.serialEventEmissionEnabled) {
+      return false
+    }
+
     if (!this.serialWriter) {
       return false
     }
