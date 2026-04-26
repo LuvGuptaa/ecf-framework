@@ -39,6 +39,7 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
   useEffect(() => {
     useERPStore.getState().resetSessionState()
     useTestStore.getState().resetSessionState()
+    trackingService.setSerialEventEmissionEnabled(false)
   }, [])
 
   useEffect(() => {
@@ -48,6 +49,7 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
 
   useEffect(() => {
     return () => {
+      trackingService.setSerialEventEmissionEnabled(false)
       void trackingService.disconnectSerial()
     }
   }, [])
@@ -69,13 +71,7 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
     try {
       await trackingService.connectSerial(9600)
       setSerialConnected(true)
-
-      const sent = await trackingService.sendSerialEvent(SERIAL_TEST_ID)
-      if (sent) {
-        setSerialStatus(`Connected. Sent test packet ${SERIAL_TEST_ID},<timestamp>.`)
-      } else {
-        setSerialStatus("Connected, but the first test packet was not sent.")
-      }
+      setSerialStatus("Connected. Marker output stays locked until screen/camera are granted and calibration begins.")
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not connect to serial device."
       setSerialConnected(false)
@@ -95,7 +91,7 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
 
   const handleSendSerialTest = useCallback(async () => {
     setSerialBusy(true)
-    const sent = await trackingService.sendSerialEvent(SERIAL_TEST_ID)
+    const sent = await trackingService.sendSerialEvent(SERIAL_TEST_ID, Date.now(), { bypassEmissionGate: true })
     if (sent) {
       setSerialStatus(`Sent test packet ${SERIAL_TEST_ID},<timestamp>.`)
     } else {
@@ -124,6 +120,7 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
 
       setPermissionStep("screen-granted")
     } catch (err: unknown) {
+      trackingService.setSerialEventEmissionEnabled(false)
       setPermissionStep("initial")
       const error = err as { name?: string }
       if (error?.name === "NotAllowedError" || error?.name === "NotFoundError") {
@@ -146,8 +143,10 @@ export default function TaskRunPage({ params }: { params: { taskId: string } }) 
       cameraRecordingServiceRef.current = camRecorder
       await camRecorder.startStreamRecording(cameraStream)
 
+      trackingService.setSerialEventEmissionEnabled(true)
       setPhase("pre-calibration")
     } catch (err: unknown) {
+      trackingService.setSerialEventEmissionEnabled(false)
       setPermissionStep("screen-granted")
       const error = err as { name?: string }
       if (error?.name === "NotAllowedError") {
